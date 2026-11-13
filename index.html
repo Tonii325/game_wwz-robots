@@ -1,0 +1,3214 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Toon War Robots - MVP Jugable</title>
+    <!-- Tailwind CSS para UI e Interfaz del Hangar y HUD -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js para Motor 3D -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Iconos FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Fuente Arcade / Toon -->
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,500;0,700;1,700&family=Orbitron:wght@600;800;900&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --toon-border: 3px solid #111827;
+            --toon-shadow: 0 5px 0 #111827;
+        }
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            box-sizing: border-box;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #0f172a;
+            font-family: 'Chakra Petch', sans-serif;
+            color: #f8fafc;
+        }
+        .font-display {
+            font-family: 'Orbitron', sans-serif;
+        }
+        .toon-box {
+            border: 3px solid #090d16;
+            box-shadow: 0 5px 0 #090d16;
+        }
+        .toon-btn {
+            border: 3px solid #090d16;
+            box-shadow: 0 4px 0 #090d16;
+            transition: transform 0.1s ease, box-shadow 0.1s ease, filter 0.15s ease;
+        }
+        .toon-btn:hover:not(:disabled) {
+            filter: brightness(1.1);
+            transform: translateY(-1px);
+            box-shadow: 0 5px 0 #090d16;
+        }
+        .toon-btn:active:not(:disabled) {
+            transform: translateY(3px);
+            box-shadow: 0 1px 0 #090d16;
+        }
+        /* Scrollbar personalizada para el catálogo */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #f59e0b;
+            border-radius: 4px;
+            border: 2px solid #090d16;
+        }
+        /* Animación de números de daño flotantes estilo Arcade */
+        @keyframes floatDamage {
+            0% {
+                opacity: 1;
+                transform: translate(-50%, 0) scale(0.8);
+            }
+            25% {
+                transform: translate(-50%, -18px) scale(1.15);
+            }
+            100% {
+                opacity: 0;
+                transform: translate(-50%, -48px) scale(0.9);
+            }
+        }
+        .damage-popup {
+            position: absolute;
+            pointer-events: none;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 900;
+            text-shadow: -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, 0 3px 0 #000;
+            animation: floatDamage 0.95s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            z-index: 40;
+        }
+        #game-canvas-container canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+    </style>
+</head>
+<body class="w-screen h-screen overflow-hidden relative">
+
+    <!-- ========================================================================= -->
+    <!-- LIENZO 3D PRINCIPAL (COMPARTIDO ENTRE HANGAR Y BATALLA)                   -->
+    <!-- ========================================================================= -->
+    <div id="game-canvas-container" class="absolute inset-0 z-0"></div>
+
+    <!-- CAPA DE NÚMEROS DE DAÑO FLOTANTES Y MARCADORES 3D PROYECTADOS EN 2D -->
+    <div id="world-ui-layer" class="absolute inset-0 pointer-events-none z-10 overflow-hidden"></div>
+
+    <!-- ========================================================================= -->
+    <!-- PANTALLA 1: HANGAR Y PERSONALIZACIÓN (5 SLOTS DE DESPLIEGUE)              -->
+    <!-- ========================================================================= -->
+    <div id="hangar-screen" class="absolute inset-0 z-20 flex flex-col justify-between p-3 md:p-5 pointer-events-none">
+        
+        <!-- BARRA SUPERIOR DEL HANGAR -->
+        <header class="flex flex-wrap items-center justify-between gap-3 pointer-events-auto bg-slate-900/90 backdrop-blur-md px-5 py-3 rounded-2xl toon-box">
+            <div class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-xl bg-amber-500 flex items-center justify-center toon-box text-slate-950 text-2xl">
+                    <i class="fa-solid fa-robot"></i>
+                </div>
+                <div>
+                    <h1 class="font-display text-lg md:text-2xl font-black tracking-wider text-amber-400 drop-shadow">
+                        TOON WAR ROBOTS <span class="text-xs bg-amber-500 text-slate-950 px-2 py-0.5 rounded-md font-bold align-middle ml-1">MVP BASE</span>
+                    </h1>
+                    <p class="text-xs text-slate-300">24 Robots Clásicos • 9 Armas • Modo Dominación 5v5</p>
+                </div>
+            </div>
+
+            <!-- Botón principal ¡A LA BATALLA! -->
+            <div class="flex items-center gap-3">
+                <div class="hidden lg:flex items-center gap-4 bg-slate-800/90 px-4 py-2 rounded-xl border-2 border-slate-700 text-xs">
+                    <span><strong class="text-amber-400">WASD:</strong> Piernas</span>
+                    <span><strong class="text-amber-400">Mouse:</strong> Torso/Mira</span>
+                    <span><strong class="text-amber-400">Clic / 1-4:</strong> Armas</span>
+                    <span><strong class="text-amber-400">Q / Shift:</strong> Habilidad</span>
+                    <span><strong class="text-amber-400">Tab:</strong> Cambiar Blanco</span>
+                </div>
+                <button id="btn-start-battle" class="toon-btn bg-gradient-to-b from-orange-400 to-red-600 hover:from-orange-300 hover:to-red-500 text-white font-display font-black text-base md:text-xl px-7 py-3 rounded-xl flex items-center gap-3 cursor-pointer">
+                    <i class="fa-solid fa-crosshairs animate-pulse"></i>
+                    ¡A LA BATALLA!
+                </button>
+            </div>
+        </header>
+
+        <!-- ZONA CENTRAL DEL HANGAR (PANEL IZQUIERDO: ESTADÍSTICAS Y ARMAS / PANEL DERECHO: SELECTOR) -->
+        <div class="flex-1 flex flex-col md:flex-row items-stretch justify-between gap-4 my-3 overflow-hidden">
+            
+            <!-- PANEL IZQUIERDO: FICHA DEL ROBOT EN EL SLOT SELECCIONADO Y SUS RANURAS DE ARMA -->
+            <div class="w-full md:w-80 lg:w-96 bg-slate-900/90 backdrop-blur-md rounded-2xl p-4 toon-box pointer-events-auto flex flex-col justify-between overflow-y-auto">
+                <div>
+                    <div class="flex items-center justify-between border-b-2 border-slate-700 pb-2 mb-3">
+                        <div>
+                            <span id="hangar-robot-class" class="text-[11px] font-bold uppercase px-2 py-0.5 rounded bg-blue-500 text-white">PESADO</span>
+                            <h2 id="hangar-robot-name" class="font-display text-2xl font-black text-white mt-1">GRIFFIN</h2>
+                        </div>
+                        <button id="btn-open-robot-catalog" class="toon-btn bg-amber-400 text-slate-950 font-bold text-xs px-3 py-2 rounded-xl flex items-center gap-1.5">
+                            <i class="fa-solid fa-rotate"></i> Cambiar Robot
+                        </button>
+                    </div>
+
+                    <p id="hangar-robot-desc" class="text-xs text-slate-300 mb-3 italic">
+                        El rey del asalto aéreo con 4 armas y propulsores de salto.
+                    </p>
+
+                    <!-- Barras de estadísticas -->
+                    <div class="space-y-2 bg-slate-950/70 p-3 rounded-xl border border-slate-800 mb-3">
+                        <div>
+                            <div class="flex justify-between text-xs font-bold mb-1">
+                                <span class="text-emerald-400"><i class="fa-solid fa-heart-pulse mr-1"></i>Durabilidad (HP)</span>
+                                <span id="hangar-stat-hp" class="font-display text-white">145,000</span>
+                            </div>
+                            <div class="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden border border-slate-950">
+                                <div id="hangar-bar-hp" class="h-full bg-gradient-to-r from-emerald-500 to-green-400 rounded-full" style="width: 70%"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs font-bold mb-1">
+                                <span class="text-sky-400"><i class="fa-solid fa-gauge-high mr-1"></i>Velocidad Máx.</span>
+                                <span id="hangar-stat-speed" class="font-display text-white">38 km/h</span>
+                            </div>
+                            <div class="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden border border-slate-950">
+                                <div id="hangar-bar-speed" class="h-full bg-gradient-to-r from-sky-500 to-cyan-300 rounded-full" style="width: 60%"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Habilidad Especial del Robot -->
+                    <div class="bg-indigo-950/80 border-2 border-indigo-500/60 rounded-xl p-2.5 mb-3 flex items-center gap-3">
+                        <div id="hangar-ability-icon" class="w-10 h-10 rounded-lg bg-indigo-500 text-white flex items-center justify-center text-lg font-bold shrink-0 toon-box">
+                            <i class="fa-solid fa-jet-fighter-up"></i>
+                        </div>
+                        <div class="text-xs">
+                            <div class="flex items-center gap-2">
+                                <span class="font-display font-bold text-indigo-300 uppercase" id="hangar-ability-name">Salto Propulsado</span>
+                                <span class="text-[10px] bg-indigo-800 text-indigo-200 px-1.5 py-0.5 rounded" id="hangar-ability-cd">CD: 14s</span>
+                            </div>
+                            <p id="hangar-ability-desc" class="text-slate-300 text-[11px] mt-0.5">Salta por los aires para cruzar obstáculos o emboscar.</p>
+                        </div>
+                    </div>
+
+                    <!-- RANURAS DE ARMAS EQUIPADAS (HARDPOINTS) -->
+                    <div>
+                        <h3 class="text-xs font-display font-bold uppercase text-amber-400 mb-2 flex items-center justify-between">
+                            <span><i class="fa-solid fa-crosshairs mr-1"></i>Armamento Equipado</span>
+                            <span class="text-[11px] text-slate-400 font-sans">Clic para cambiar</span>
+                        </h3>
+                        <div id="hangar-weapons-list" class="space-y-2">
+                            <!-- Se llena dinámicamente con JS -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-3 pt-2 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
+                    <span><i class="fa-solid fa-arrows-rotate mr-1 text-amber-400"></i>Arrastra el robot 3D para rotarlo</span>
+                    <span id="hangar-slot-indicator" class="font-bold text-amber-400">SLOT #1</span>
+                </div>
+            </div>
+
+            <!-- ESPACIO CENTRAL TRANSPARENTE PARA VER EL ROBOT 3D EN EL HANGAR -->
+            <div id="hangar-3d-viewport" class="flex-1 relative flex items-end justify-center pointer-events-auto cursor-grab active:cursor-grabbing min-h-[160px]">
+                <div class="mb-2 bg-slate-900/80 backdrop-blur px-4 py-1.5 rounded-full border-2 border-slate-700 text-xs text-slate-300 pointer-events-none">
+                    <i class="fa-solid fa-hand-pointer text-amber-400 mr-1"></i> Vista Previa 3D Toon • Arrastra para girar 360°
+                </div>
+            </div>
+
+            <!-- PANEL DERECHO: CATÁLOGO CONTEXTUAL (ROBOTS O ARMAS) -->
+            <div id="hangar-catalog-panel" class="w-full md:w-80 lg:w-96 bg-slate-900/90 backdrop-blur-md rounded-2xl p-4 toon-box pointer-events-auto flex flex-col overflow-hidden">
+                <div class="flex items-center justify-between border-b-2 border-slate-700 pb-2 mb-2">
+                    <h3 id="catalog-title" class="font-display text-sm font-black text-amber-400 uppercase">
+                        CATÁLOGO DE ROBOTS (24)
+                    </h3>
+                    <span id="catalog-subtitle" class="text-[11px] bg-slate-800 px-2 py-0.5 rounded text-slate-300">Elige chasis</span>
+                </div>
+
+                <!-- Filtros por Clase (Ligero, Mediano, Pesado) -->
+                <div id="catalog-filters" class="grid grid-cols-4 gap-1.5 mb-3">
+                    <button data-filter="ALL" class="catalog-filter-btn toon-btn bg-amber-400 text-slate-950 font-bold text-xs py-1.5 rounded-lg">Todos</button>
+                    <button data-filter="Ligero" class="catalog-filter-btn toon-btn bg-slate-800 text-slate-200 font-bold text-xs py-1.5 rounded-lg">Ligeros</button>
+                    <button data-filter="Mediano" class="catalog-filter-btn toon-btn bg-slate-800 text-slate-200 font-bold text-xs py-1.5 rounded-lg">Medianos</button>
+                    <button data-filter="Pesado" class="catalog-filter-btn toon-btn bg-slate-800 text-slate-200 font-bold text-xs py-1.5 rounded-lg">Pesados</button>
+                </div>
+
+                <!-- Lista desplazable de Robots o Armas -->
+                <div id="catalog-items-container" class="flex-1 overflow-y-auto space-y-2 pr-1">
+                    <!-- Se llena dinámicamente con JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- BARRA INFERIOR: LOS 5 SLOTS DEL MAZO DE DESPLIEGUE DEL JUGADOR -->
+        <footer class="pointer-events-auto bg-slate-900/90 backdrop-blur-md p-3 rounded-2xl toon-box">
+            <div class="flex items-center justify-between mb-2 px-1">
+                <span class="text-xs font-display font-bold uppercase text-amber-400">
+                    <i class="fa-solid fa-layer-group mr-1"></i>Tu Mazo de Despliegue Activo (5 Slots de Hangar)
+                </span>
+                <span class="text-xs text-slate-400 hidden sm:inline">Puedes usar los 5 robots durante una misma partida</span>
+            </div>
+            <div id="hangar-slots-bar" class="grid grid-cols-5 gap-2 md:gap-3">
+                <!-- Se genera dinámicamente con JS -->
+            </div>
+        </footer>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- PANTALLA 2: HUD DE COMBATE TÁCTICO 5v5                                    -->
+    <!-- ========================================================================= -->
+    <div id="battle-hud" class="hidden absolute inset-0 z-20 pointer-events-none flex flex-col justify-between p-3 md:p-5">
+        
+        <!-- PARTE SUPERIOR: BARRAS DE TICKETS, 5 BALIZAS (A-E) Y CONTROLES DE PARTIDA -->
+        <div class="flex items-start justify-between gap-2 w-full">
+            
+            <!-- MINIMAPA TÁCTICO (ESQUINA SUPERIOR IZQUIERDA) -->
+            <div class="pointer-events-auto bg-slate-900/85 backdrop-blur-md p-2 rounded-2xl toon-box flex flex-col items-center">
+                <div class="flex justify-between w-full text-[10px] font-display font-bold text-slate-300 px-1 mb-1">
+                    <span>RADAR TÁCTICO</span>
+                    <span id="hud-fps" class="text-amber-400">5v5</span>
+                </div>
+                <canvas id="minimap-canvas" width="136" height="136" class="rounded-xl border-2 border-slate-700 bg-slate-950"></canvas>
+            </div>
+
+            <!-- MARCADOR CENTRAL: BALIZAS A-B-C-D-E Y BARRAS DE DOMINIO -->
+            <div class="flex-1 max-w-xl mx-auto bg-slate-900/90 backdrop-blur-md px-4 py-2.5 rounded-2xl toon-box">
+                <!-- Iconos de las 5 Balizas -->
+                <div id="hud-beacons-row" class="flex items-center justify-center gap-2 sm:gap-4 mb-2">
+                    <!-- A, B, C, D, E generados dinámicamente -->
+                </div>
+
+                <!-- Barras de Tickets Aliados (Azul) vs Enemigos (Rojo) -->
+                <div class="grid grid-cols-2 gap-3 items-center">
+                    <div>
+                        <div class="flex justify-between text-[11px] font-display font-bold text-sky-400 mb-0.5">
+                            <span>ALIADOS (AZUL)</span>
+                            <span id="hud-blue-tickets">1000</span>
+                        </div>
+                        <div class="w-full h-3 bg-slate-950 rounded-full overflow-hidden border-2 border-slate-800">
+                            <div id="hud-blue-bar" class="h-full bg-gradient-to-r from-blue-600 to-sky-400 transition-all duration-300" style="width: 100%"></div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-[11px] font-display font-bold text-rose-400 mb-0.5">
+                            <span id="hud-red-tickets">1000</span>
+                            <span>ENEMIGOS (ROJO)</span>
+                        </div>
+                        <div class="w-full h-3 bg-slate-950 rounded-full overflow-hidden border-2 border-slate-800">
+                            <div id="hud-red-bar" class="h-full bg-gradient-to-l from-red-600 to-rose-400 ml-auto transition-all duration-300" style="width: 100%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BOTONES DE ACCIÓN RÁPIDA EN BATALLA (ESQUINA SUPERIOR DERECHA) -->
+            <div class="pointer-events-auto flex flex-col gap-2">
+                <button id="btn-change-robot-midgame" class="toon-btn bg-amber-400 text-slate-950 font-display font-bold text-xs px-3 py-2 rounded-xl flex items-center gap-1.5 cursor-pointer">
+                    <i class="fa-solid fa-rotate"></i> Cambiar Robot (M)
+                </button>
+                <button id="btn-return-hangar" class="toon-btn bg-slate-800 text-slate-200 font-bold text-xs px-3 py-2 rounded-xl flex items-center gap-1.5 cursor-pointer">
+                    <i class="fa-solid fa-warehouse"></i> Salir al Hangar
+                </button>
+            </div>
+        </div>
+
+        <!-- MIRA CENTRAL (RETÍCULA DE TORSO Y DIRECCIÓN DE PIERNAS) -->
+        <div class="relative flex-1 flex items-center justify-center">
+            <!-- Indicador de Captura de Baliza Actual -->
+            <div id="hud-beacon-capture-alert" class="hidden absolute top-4 bg-slate-900/90 px-4 py-1.5 rounded-full toon-box text-xs font-display font-bold text-amber-300 flex items-center gap-2">
+                <i class="fa-solid fa-tower-broadcast animate-ping"></i>
+                <span id="hud-beacon-capture-text">CAPTURANDO BALIZA C...</span>
+            </div>
+
+            <!-- Retícula central -->
+            <div class="relative w-16 h-16 flex items-center justify-center">
+                <div class="w-12 h-12 rounded-full border-2 border-white/60 flex items-center justify-center">
+                    <div class="w-1.5 h-1.5 bg-amber-400 rounded-full"></div>
+                </div>
+                <!-- Líneas de mira -->
+                <div class="absolute -top-2 w-0.5 h-3 bg-amber-400"></div>
+                <div class="absolute -bottom-2 w-0.5 h-3 bg-amber-400"></div>
+                <div class="absolute -left-2 h-0.5 w-3 bg-amber-400"></div>
+                <div class="absolute -right-2 h-0.5 w-3 bg-amber-400"></div>
+            </div>
+
+            <!-- Aviso de estado de mira ratón -->
+            <div id="hud-pointer-hint" class="absolute bottom-3 bg-slate-950/75 text-slate-300 text-[11px] px-3 py-1 rounded-full border border-slate-700">
+                Haz clic en la pantalla para fijar cámara 360° • <span class="text-amber-400 font-bold">ESC</span> para liberar ratón
+            </div>
+        </div>
+
+        <!-- PARTE INFERIOR: VIDA/ESCUDO DEL JUGADOR, HABILIDAD ESPECIAL Y PANELES DE ARMAS -->
+        <div class="flex flex-col md:flex-row items-end justify-between gap-3 w-full">
+            
+            <!-- PANEL INFERIOR IZQUIERDO: ESTADO DEL ROBOT DEL JUGADOR -->
+            <div class="pointer-events-auto w-full md:w-80 bg-slate-900/90 backdrop-blur-md p-3.5 rounded-2xl toon-box">
+                <div class="flex items-center justify-between mb-1.5">
+                    <div>
+                        <span id="hud-player-robot-name" class="font-display font-black text-base text-amber-400">GRIFFIN</span>
+                        <span id="hud-player-status-badge" class="ml-2 text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">OPERATIVO</span>
+                    </div>
+                    <span id="hud-leg-angle-diff" class="text-[11px] text-slate-400 font-mono">TORSO OK</span>
+                </div>
+
+                <!-- Barra de Escudo (Ancile o Físico si aplica) -->
+                <div id="hud-shield-container" class="mb-2 hidden">
+                    <div class="flex justify-between text-[11px] font-bold text-cyan-300 mb-0.5">
+                        <span><i class="fa-solid fa-shield-halved mr-1"></i>ESCUDO ACTIVO</span>
+                        <span id="hud-player-shield-text" class="font-display">50,000</span>
+                    </div>
+                    <div class="w-full h-2.5 bg-slate-950 rounded-full overflow-hidden border border-cyan-500/50">
+                        <div id="hud-player-shield-bar" class="h-full bg-gradient-to-r from-blue-500 to-cyan-300 transition-all duration-150" style="width: 100%"></div>
+                    </div>
+                </div>
+
+                <!-- Barra de Vida (HP) -->
+                <div>
+                    <div class="flex justify-between text-xs font-bold text-emerald-400 mb-0.5">
+                        <span><i class="fa-solid fa-heart-pulse mr-1"></i>INTEGRIDAD CHASIS</span>
+                        <span id="hud-player-hp-text" class="font-display text-white">145,000 / 145,000</span>
+                    </div>
+                    <div class="w-full h-4 bg-slate-950 rounded-full overflow-hidden border-2 border-slate-800">
+                        <div id="hud-player-hp-bar" class="h-full bg-gradient-to-r from-emerald-600 to-green-400 transition-all duration-150" style="width: 100%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BOTÓN CENTRAL INFERIOR: HABILIDAD ESPECIAL (TECLA Q o SHIFT) -->
+            <div class="pointer-events-auto flex items-center gap-3 self-center md:self-end">
+                <button id="btn-trigger-ability" class="toon-btn relative w-20 h-20 rounded-2xl bg-gradient-to-b from-indigo-500 to-purple-700 text-white flex flex-col items-center justify-center cursor-pointer overflow-hidden">
+                    <div id="hud-ability-cooldown-overlay" class="absolute inset-0 bg-slate-950/85 flex items-center justify-center font-display font-black text-xl text-amber-400 hidden">
+                        8.5s
+                    </div>
+                    <i id="hud-ability-icon" class="fa-solid fa-jet-fighter-up text-2xl mb-1"></i>
+                    <span id="hud-ability-label" class="font-display text-[10px] font-bold uppercase tracking-tight">SALTO</span>
+                    <span class="text-[9px] bg-slate-950/70 px-1.5 rounded mt-0.5 text-amber-300">Q / Shift</span>
+                </button>
+
+                <button id="btn-cycle-target" class="toon-btn w-16 h-16 rounded-2xl bg-slate-800 text-rose-400 flex flex-col items-center justify-center cursor-pointer">
+                    <i class="fa-solid fa-crosshairs text-xl mb-0.5"></i>
+                    <span class="font-display text-[9px] font-bold uppercase">BLANCO</span>
+                    <span class="text-[9px] text-slate-400">TAB</span>
+                </button>
+            </div>
+
+            <!-- PANEL INFERIOR DERECHO: LAS 4 RANURAS DE ARMAS Y DISPARO -->
+            <div class="pointer-events-auto flex flex-col items-end gap-2 w-full md:w-auto">
+                <div id="hud-weapons-grid" class="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full md:w-auto">
+                    <!-- Paneles de cada arma equipada (Teclas 1, 2, 3, 4) -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- MODAL 3: DESPLIEGUE TÁCTICO / RESPAWN (ELEGIR ROBOT Y BALIZA)             -->
+    <!-- ========================================================================= -->
+    <div id="deploy-modal" class="hidden absolute inset-0 z-30 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="w-full max-w-4xl bg-slate-900 rounded-3xl p-5 md:p-6 toon-box flex flex-col gap-4">
+            <div class="flex items-center justify-between border-b-2 border-slate-800 pb-3">
+                <div>
+                    <h2 id="deploy-modal-title" class="font-display text-xl md:text-2xl font-black text-amber-400">
+                        DESPLIEGUE TÁCTICO DE COMBATE
+                    </h2>
+                    <p class="text-xs text-slate-300">Selecciona un punto de despliegue (Base o Baliza Aliada) y elige qué robot enviar al campo de batalla.</p>
+                </div>
+                <button id="btn-close-deploy-modal" class="hidden toon-btn bg-slate-800 text-slate-300 px-3 py-1.5 rounded-xl text-xs font-bold">
+                    Cancelar
+                </button>
+            </div>
+
+            <!-- PASO 1: ELEGIR PUNTO DE APARICIÓN (BASE O BALIZAS CAPTURADAS) -->
+            <div>
+                <label class="block text-xs font-display font-bold uppercase text-sky-400 mb-2">
+                    1. Punto de Despliegue (Beacon Rush):
+                </label>
+                <div id="deploy-spawn-points" class="flex flex-wrap gap-2">
+                    <!-- Se llena dinámicamente -->
+                </div>
+            </div>
+
+            <!-- PASO 2: ELEGIR UNO DE LOS 5 ROBOTS DEL MAZO -->
+            <div>
+                <label class="block text-xs font-display font-bold uppercase text-amber-400 mb-2">
+                    2. Selecciona Robot de tu Mazo (5 Slots):
+                </label>
+                <div id="deploy-robots-grid" class="grid grid-cols-1 sm:grid-cols-5 gap-2.5">
+                    <!-- Se llena dinámicamente -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- MODAL 4: PANTALLA DE FIN DE PARTIDA (VICTORIA / DERROTA)                  -->
+    <!-- ========================================================================= -->
+    <div id="gameover-modal" class="hidden absolute inset-0 z-40 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="w-full max-w-lg bg-slate-900 rounded-3xl p-6 toon-box text-center">
+            <div id="gameover-badge" class="w-20 h-20 mx-auto rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center text-4xl mb-4 toon-box">
+                <i class="fa-solid fa-trophy"></i>
+            </div>
+            <h2 id="gameover-title" class="font-display text-3xl font-black text-amber-400 mb-1">¡VICTORIA TÁCTICA!</h2>
+            <p id="gameover-reason" class="text-sm text-slate-300 mb-5">Tu escuadrón dominó las balizas y agotó los tickets enemigos.</p>
+
+            <div class="grid grid-cols-3 gap-3 bg-slate-950 p-4 rounded-2xl border-2 border-slate-800 mb-6">
+                <div>
+                    <span class="text-[11px] text-slate-400 block">DAÑO CAUSADO</span>
+                    <span id="stat-final-damage" class="font-display text-lg font-black text-amber-400">0</span>
+                </div>
+                <div>
+                    <span class="text-[11px] text-slate-400 block">ROBOTS DESTRUIDOS</span>
+                    <span id="stat-final-kills" class="font-display text-lg font-black text-rose-400">0</span>
+                </div>
+                <div>
+                    <span class="text-[11px] text-slate-400 block">BALIZAS CAPTURADAS</span>
+                    <span id="stat-final-beacons" class="font-display text-lg font-black text-sky-400">0</span>
+                </div>
+            </div>
+
+            <div class="flex gap-3 justify-center">
+                <button id="btn-gameover-hangar" class="toon-btn bg-amber-400 text-slate-950 font-display font-black px-6 py-3 rounded-xl cursor-pointer">
+                    <i class="fa-solid fa-warehouse mr-1.5"></i> Volver al Hangar
+                </button>
+                <button id="btn-gameover-rematch" class="toon-btn bg-emerald-500 text-slate-950 font-display font-black px-6 py-3 rounded-xl cursor-pointer">
+                    <i class="fa-solid fa-rotate-right mr-1.5"></i> Jugar Otra Vez
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- CÓDIGO JAVASCRIPT MODULAR Y COMENTADO                                     -->
+    <!-- ========================================================================= -->
+    <script>
+    /**
+     * ============================================================================
+     * GUÍA PARA EL DESARROLLADOR: CÓMO EXPANDIR ESTE JUEGO
+     * ============================================================================
+     * 1. Para añadir más ARMAS: Agrega un nuevo objeto en `WEAPONS_DB` indicando
+     *    su `slot` ('light', 'medium', 'heavy'), daño, cadencia, rango y tipo de proyectil.
+     * 2. Para añadir más ROBOTS: Agrega un nuevo objeto en `ROBOTS_DB` definiendo
+     *    su clase, vida (`hp`), velocidad (`speed`), ranuras (`slots`), habilidad (`ability`)
+     *    y su estilo visual (`chassisType`, `primaryColor`, `secondaryColor`).
+     * 3. El generador 3D procedural (`MeshBuilder`) construirá automáticamente el
+     *    chasis, las patas articuladas y las armas en 3D con bordes Cel-Shaded.
+     * ============================================================================
+     */
+
+    // ============================================================================
+    // SECCIÓN 1: CATÁLOGO DE LAS 7 HABILIDADES ESPECIALES
+    // ============================================================================
+    const ABILITIES_DB = {
+        JUMP: {
+            id: 'JUMP',
+            name: 'Salto Propulsado',
+            icon: 'fa-jet-fighter-up',
+            cooldown: 13,
+            duration: 2.2,
+            description: 'Impulsa al robot por los aires en un arco parabólico para emboscar o cruzar edificios.'
+        },
+        DASH: {
+            id: 'DASH',
+            name: 'Embiste Rápido',
+            icon: 'fa-bolt',
+            cooldown: 9,
+            duration: 0.7,
+            description: 'Aceleración explosiva horizontal de los propulsores para esquivar fuego o capturar balizas.'
+        },
+        STEALTH: {
+            id: 'STEALTH',
+            name: 'Modo Sigilo',
+            icon: 'fa-eye-slash',
+            cooldown: 15,
+            duration: 6.0,
+            description: 'Camuflaje óptico: los enemigos no pueden fijarte como blanco durante 6 segundos.'
+        },
+        ANCILE: {
+            id: 'ANCILE',
+            name: 'Escudo de Energía',
+            icon: 'fa-circle-nodes',
+            cooldown: 14,
+            duration: 7.0,
+            description: 'Despliega y sobrecarga un domo de energía Ancile que absorbe impactos enemigos.'
+        },
+        SHIELD: {
+            id: 'SHIELD',
+            name: 'Escudo de Asalto',
+            icon: 'fa-shield-halved',
+            cooldown: 12,
+            duration: 6.5,
+            description: 'Refuerza el blindaje físico frontal absorbiendo daño y aumenta la velocidad un 35%.'
+        },
+        SIEGE: {
+            id: 'SIEGE',
+            name: 'Modo Asedio',
+            icon: 'fa-anchor',
+            cooldown: 12,
+            duration: 7.0,
+            description: 'Ancla los actuadores al suelo, despliega un escudo defensivo y aumenta el daño de armas +35%.'
+        },
+        OVERDRIVE: {
+            id: 'OVERDRIVE',
+            name: 'Sobrecarga y Reparación',
+            icon: 'fa-screwdriver-wrench',
+            cooldown: 14,
+            duration: 5.0,
+            description: 'Repara inmediatamente un 22% de la vida máxima y aumenta la potencia motriz.'
+        }
+    };
+
+    // ============================================================================
+    // SECCIÓN 2: CATÁLOGO DE 9 ARMAS CLÁSICAS (3 LIGERAS, 3 MEDIANAS, 3 PESADAS)
+    // ============================================================================
+    const WEAPONS_DB = {
+        // --- ARMAS LIGERAS ('light') ---
+        punisher_l: {
+            id: 'punisher_l',
+            name: 'Punisher-L',
+            slot: 'light',
+            slotLabel: 'Ligera',
+            type: 'kinetic',
+            damage: 980,
+            fireRate: 0.11,     // Segundos entre disparos
+            clipSize: 70,
+            reloadTime: 4.5,
+            range: 500,
+            projectileSpeed: 230,
+            spread: 0.035,
+            pellets: 1,
+            splashRadius: 0,
+            color: '#fbbf24',
+            description: 'Ametralladora rotativa ligera de alta cadencia.'
+        },
+        pin: {
+            id: 'pin',
+            name: 'CRV Pin',
+            slot: 'light',
+            slotLabel: 'Ligera',
+            type: 'rocket',
+            damage: 4200,
+            fireRate: 0.35,
+            clipSize: 4,
+            reloadTime: 4.5,
+            range: 500,
+            projectileSpeed: 135,
+            spread: 0.015,
+            pellets: 1,
+            splashRadius: 9,
+            color: '#f97316',
+            description: 'Lanzacohetes ligero de 500m con daño explosivo en área.'
+        },
+        magnum: {
+            id: 'magnum',
+            name: 'EP Magnum',
+            slot: 'light',
+            slotLabel: 'Ligera',
+            type: 'plasma',
+            damage: 2950,
+            fireRate: 0.42,
+            clipSize: 999,      // Sin recarga (continuo)
+            reloadTime: 0.5,
+            range: 350,
+            projectileSpeed: 185,
+            spread: 0.008,
+            pellets: 1,
+            splashRadius: 0,
+            color: '#22d3ee',
+            description: 'Cañón de plasma continuo sin tiempo de recarga.'
+        },
+
+        // --- ARMAS MEDIANAS ('medium') ---
+        punisher_m: {
+            id: 'punisher_m',
+            name: 'Punisher Mk2',
+            slot: 'medium',
+            slotLabel: 'Mediana',
+            type: 'kinetic',
+            damage: 1480,
+            fireRate: 0.10,
+            clipSize: 80,
+            reloadTime: 5.0,
+            range: 500,
+            projectileSpeed: 235,
+            spread: 0.038,
+            pellets: 1,
+            splashRadius: 0,
+            color: '#f59e0b',
+            description: 'Ametralladora doble mediana para lluvia de balas sostenida.'
+        },
+        tulumbas: {
+            id: 'tulumbas',
+            name: 'S-25 Tulumbas',
+            slot: 'medium',
+            slotLabel: 'Mediana',
+            type: 'rocket',
+            damage: 4600,
+            fireRate: 0.25,
+            clipSize: 6,
+            reloadTime: 5.5,
+            range: 500,
+            projectileSpeed: 145,
+            spread: 0.02,
+            pellets: 1,
+            splashRadius: 11,
+            color: '#ef4444',
+            description: 'Lanzamisiles mediano en salva con gran radio de explosión.'
+        },
+        taran: {
+            id: 'taran',
+            name: 'E-WW Taran',
+            slot: 'medium',
+            slotLabel: 'Mediana',
+            type: 'plasma',
+            damage: 3650,
+            fireRate: 0.26,
+            clipSize: 16,
+            reloadTime: 4.2,
+            range: 350,
+            projectileSpeed: 190,
+            spread: 0.01,
+            pellets: 1,
+            splashRadius: 0,
+            color: '#06b6d4',
+            description: 'Descargador de plasma pesado de corto-medio alcance.'
+        },
+
+        // --- ARMAS PESADAS ('heavy') ---
+        thunder: {
+            id: 'thunder',
+            name: 'ECC Thunder',
+            slot: 'heavy',
+            slotLabel: 'Pesada',
+            type: 'shotgun',
+            damage: 1650,       // Por perdigón (x8 perdigones = 13,200 a quemarropa)
+            fireRate: 0.85,
+            clipSize: 8,
+            reloadTime: 4.5,
+            range: 350,
+            projectileSpeed: 220,
+            spread: 0.095,
+            pellets: 8,
+            splashRadius: 0,
+            color: '#fde047',
+            description: 'Escopeta pesada devastadora a quemarropa con 8 perdigones.'
+        },
+        trident: {
+            id: 'trident',
+            name: 'CRS Trident',
+            slot: 'heavy',
+            slotLabel: 'Pesada',
+            type: 'rocket',
+            damage: 9800,
+            fireRate: 0.85,
+            clipSize: 3,
+            reloadTime: 5.5,
+            range: 600,
+            projectileSpeed: 165,
+            spread: 0.008,
+            pellets: 1,
+            splashRadius: 14,
+            color: '#f97316',
+            description: 'Cañón pesado de artillería con proyectiles explosivos de 600m.'
+        },
+        trebuchet: {
+            id: 'trebuchet',
+            name: 'E-SG Trebuchet',
+            slot: 'heavy',
+            slotLabel: 'Pesada',
+            type: 'sniper',
+            damage: 24500,
+            fireRate: 1.5,
+            clipSize: 1,
+            reloadTime: 6.5,
+            range: 800,
+            projectileSpeed: 480,
+            spread: 0.001,
+            pellets: 1,
+            splashRadius: 0,
+            color: '#a855f7',
+            description: 'Cañón láser francotirador de largo alcance y daño masivo.'
+        }
+    };
+
+    // ============================================================================
+    // SECCIÓN 3: CATÁLOGO DE 24 ROBOTS (8 LIGEROS, 8 MEDIANOS, 8 PESADOS)
+    // ============================================================================
+    const ROBOTS_DB = [
+        // ================= 8 ROBOTS LIGEROS =================
+        {
+            id: 'destrier',
+            name: 'Destrier',
+            robotClass: 'Ligero',
+            hp: 72000,
+            speed: 48,
+            turnSpeed: 2.6,
+            scale: 0.85,
+            chassisType: 'biped_compact',
+            primaryColor: '#64748b',
+            secondaryColor: '#f59e0b',
+            slots: ['light', 'light'],
+            defaultWeapons: ['punisher_l', 'punisher_l'],
+            ability: 'OVERDRIVE',
+            description: 'Robot ligero clásico de reconocimiento con doble anclaje lateral.'
+        },
+        {
+            id: 'cossack',
+            name: 'Cossack',
+            robotClass: 'Ligero',
+            hp: 68000,
+            speed: 55,
+            turnSpeed: 2.9,
+            scale: 0.86,
+            chassisType: 'biped_tall',
+            primaryColor: '#22c55e',
+            secondaryColor: '#facc15',
+            slots: ['medium'],
+            defaultWeapons: ['tulumbas'],
+            ability: 'JUMP',
+            description: 'Explorador ultraligero famoso por sus saltos para capturar balizas.'
+        },
+        {
+            id: 'gepard',
+            name: 'Gepard',
+            robotClass: 'Ligero',
+            hp: 76000,
+            speed: 54,
+            turnSpeed: 2.8,
+            scale: 0.85,
+            chassisType: 'biped_wide',
+            primaryColor: '#eab308',
+            secondaryColor: '#1e293b',
+            slots: ['light', 'light', 'light'],
+            defaultWeapons: ['magnum', 'magnum', 'magnum'],
+            ability: 'DASH',
+            description: 'Cazador ágil y aerodinámico con triple ranura de arma ligera.'
+        },
+        {
+            id: 'stalker',
+            name: 'Stalker',
+            robotClass: 'Ligero',
+            hp: 75000,
+            speed: 56,
+            turnSpeed: 3.0,
+            scale: 0.84,
+            chassisType: 'biped_compact',
+            primaryColor: '#84cc16',
+            secondaryColor: '#0f172a',
+            slots: ['light', 'light'],
+            defaultWeapons: ['pin', 'pin'],
+            ability: 'STEALTH',
+            description: 'Saboteador equipado con sistema de camuflaje óptico temporal.'
+        },
+        {
+            id: 'gareth',
+            name: 'Gareth',
+            robotClass: 'Ligero',
+            hp: 85000,
+            speed: 52,
+            turnSpeed: 2.7,
+            scale: 0.88,
+            chassisType: 'biped_knight',
+            primaryColor: '#3b82f6',
+            secondaryColor: '#e2e8f0',
+            slots: ['light', 'medium'],
+            defaultWeapons: ['magnum', 'taran'],
+            ability: 'SHIELD',
+            description: 'Caballero ligero equipado con un escudo físico frontal desplegable.'
+        },
+        {
+            id: 'bolt',
+            name: 'Bolt',
+            robotClass: 'Ligero',
+            hp: 74000,
+            speed: 55,
+            turnSpeed: 2.9,
+            scale: 0.85,
+            chassisType: 'biped_compact',
+            primaryColor: '#06b6d4',
+            secondaryColor: '#f97316',
+            slots: ['light', 'light', 'light'],
+            defaultWeapons: ['punisher_l', 'punisher_l', 'punisher_l'],
+            ability: 'DASH',
+            description: 'Corredor de alta velocidad con propulsor de embestida instantánea.'
+        },
+        {
+            id: 'jesse',
+            name: 'Jesse',
+            robotClass: 'Ligero',
+            hp: 78000,
+            speed: 50,
+            turnSpeed: 2.7,
+            scale: 0.88,
+            chassisType: 'biped_wide',
+            primaryColor: '#d97706',
+            secondaryColor: '#fef3c7',
+            slots: ['light', 'light', 'light', 'light'],
+            defaultWeapons: ['pin', 'pin', 'pin', 'pin'],
+            ability: 'OVERDRIVE',
+            description: 'Pistolero del desierto capaz de disparar 4 armas ligeras a la vez.'
+        },
+        {
+            id: 'blitz',
+            name: 'Blitz',
+            robotClass: 'Ligero',
+            hp: 84000,
+            speed: 52,
+            turnSpeed: 2.8,
+            scale: 0.88,
+            chassisType: 'biped_wide',
+            primaryColor: '#a855f7',
+            secondaryColor: '#fde047',
+            slots: ['light', 'light', 'light', 'light'],
+            defaultWeapons: ['magnum', 'magnum', 'magnum', 'magnum'],
+            ability: 'ANCILE',
+            description: 'Asaltante agresivo con 4 armas ligeras y domo de energía Ancile.'
+        },
+
+        // ================= 8 ROBOTS MEDIANOS =================
+        {
+            id: 'vityaz',
+            name: 'Vityaz',
+            robotClass: 'Mediano',
+            hp: 118000,
+            speed: 42,
+            turnSpeed: 2.2,
+            scale: 1.0,
+            chassisType: 'biped_tall',
+            primaryColor: '#f97316',
+            secondaryColor: '#334155',
+            slots: ['light', 'light', 'heavy'],
+            defaultWeapons: ['punisher_l', 'punisher_l', 'thunder'],
+            ability: 'OVERDRIVE',
+            description: 'Guerrero mediano con torreta pesada superior y dos armas ligeras.'
+        },
+        {
+            id: 'patton',
+            name: 'GL. Patton',
+            robotClass: 'Mediano',
+            hp: 115000,
+            speed: 40,
+            turnSpeed: 2.1,
+            scale: 1.0,
+            chassisType: 'biped_tank',
+            primaryColor: '#16a34a',
+            secondaryColor: '#bbf7d0',
+            slots: ['light', 'light', 'light', 'light'],
+            defaultWeapons: ['pin', 'pin', 'pin', 'pin'],
+            ability: 'SIEGE',
+            description: 'Plataforma simétrica con 4 armas ligeras y modo de fuego anclado.'
+        },
+        {
+            id: 'boa',
+            name: 'Boa',
+            robotClass: 'Mediano',
+            hp: 138000,
+            speed: 41,
+            turnSpeed: 2.2,
+            scale: 1.02,
+            chassisType: 'biped_tank',
+            primaryColor: '#dc2626',
+            secondaryColor: '#fca5a5',
+            slots: ['medium', 'heavy'],
+            defaultWeapons: ['taran', 'thunder'],
+            ability: 'SHIELD',
+            description: 'Tanque brawler compacto de enorme vitalidad para peleas cortas.'
+        },
+        {
+            id: 'rogatka',
+            name: 'Rogatka',
+            robotClass: 'Mediano',
+            hp: 116000,
+            speed: 47,
+            turnSpeed: 2.5,
+            scale: 1.0,
+            chassisType: 'biped_compact',
+            primaryColor: '#10b981',
+            secondaryColor: '#064e3b',
+            slots: ['medium', 'medium'],
+            defaultWeapons: ['tulumbas', 'tulumbas'],
+            ability: 'JUMP',
+            description: 'Unidad de asalto táctico con doble arma mediana y salto propulsado.'
+        },
+        {
+            id: 'galahad',
+            name: 'Galahad',
+            robotClass: 'Mediano',
+            hp: 122000,
+            speed: 44,
+            turnSpeed: 2.3,
+            scale: 1.02,
+            chassisType: 'biped_knight',
+            primaryColor: '#2563eb',
+            secondaryColor: '#93c5fd',
+            slots: ['light', 'light', 'medium'],
+            defaultWeapons: ['magnum', 'magnum', 'taran'],
+            ability: 'SHIELD',
+            description: 'Paladín mediano con escudo físico frontal y excelente potencia.'
+        },
+        {
+            id: 'carnage',
+            name: 'Carnage',
+            robotClass: 'Mediano',
+            hp: 108000,
+            speed: 45,
+            turnSpeed: 2.4,
+            scale: 1.04,
+            chassisType: 'biped_wide',
+            primaryColor: '#ef4444',
+            secondaryColor: '#38bdf8',
+            slots: ['heavy', 'heavy'],
+            defaultWeapons: ['thunder', 'thunder'],
+            ability: 'ANCILE',
+            description: 'Cazador letal con 2 armas pesadas y escudo de energía Ancile.'
+        },
+        {
+            id: 'fujin',
+            name: 'Fujin',
+            robotClass: 'Mediano',
+            hp: 126000,
+            speed: 41,
+            turnSpeed: 2.3,
+            scale: 1.05,
+            chassisType: 'quad_spider',
+            primaryColor: '#e11d48',
+            secondaryColor: '#f8fafc',
+            slots: ['medium', 'medium', 'medium'],
+            defaultWeapons: ['punisher_m', 'punisher_m', 'punisher_m'],
+            ability: 'SIEGE',
+            description: 'Robot araña de 4 patas con 3 armas medianas y modo Bastión.'
+        },
+        {
+            id: 'doc',
+            name: 'Doc',
+            robotClass: 'Mediano',
+            hp: 120000,
+            speed: 44,
+            turnSpeed: 2.3,
+            scale: 1.02,
+            chassisType: 'biped_wide',
+            primaryColor: '#ca8a04',
+            secondaryColor: '#fef08a',
+            slots: ['medium', 'medium', 'medium', 'medium'],
+            defaultWeapons: ['tulumbas', 'tulumbas', 'tulumbas', 'tulumbas'],
+            ability: 'OVERDRIVE',
+            description: 'Forajido armado con 4 ranuras medianas para descargas masivas.'
+        },
+
+        // ================= 8 ROBOTS PESADOS =================
+        {
+            id: 'griffin',
+            name: 'Griffin',
+            robotClass: 'Pesado',
+            hp: 152000,
+            speed: 37,
+            turnSpeed: 1.9,
+            scale: 1.16,
+            chassisType: 'biped_wide',
+            primaryColor: '#475569',
+            secondaryColor: '#f97316',
+            slots: ['light', 'light', 'medium', 'medium'],
+            defaultWeapons: ['pin', 'pin', 'tulumbas', 'tulumbas'],
+            ability: 'JUMP',
+            description: 'Ícono clásico de War Robots: 4 armas y propulsores de salto aéreo.'
+        },
+        {
+            id: 'leo',
+            name: 'Leo',
+            robotClass: 'Pesado',
+            hp: 195000,
+            speed: 34,
+            turnSpeed: 1.7,
+            scale: 1.2,
+            chassisType: 'biped_tank',
+            primaryColor: '#d97706',
+            secondaryColor: '#451a03',
+            slots: ['light', 'light', 'light', 'heavy'],
+            defaultWeapons: ['punisher_l', 'punisher_l', 'punisher_l', 'thunder'],
+            ability: 'SHIELD',
+            description: 'Coloso de blindaje extremo diseñado para liderar el avance frontal.'
+        },
+        {
+            id: 'natasha',
+            name: 'Natasha',
+            robotClass: 'Pesado',
+            hp: 162000,
+            speed: 34,
+            turnSpeed: 1.7,
+            scale: 1.2,
+            chassisType: 'biped_tall',
+            primaryColor: '#0284c7',
+            secondaryColor: '#e0f2fe',
+            slots: ['light', 'light', 'heavy', 'heavy'],
+            defaultWeapons: ['pin', 'pin', 'trident', 'trident'],
+            ability: 'SIEGE',
+            description: 'Plataforma pesada con 2 cañones pesados y 2 armas ligeras.'
+        },
+        {
+            id: 'fury',
+            name: 'Fury',
+            robotClass: 'Pesado',
+            hp: 158000,
+            speed: 35,
+            turnSpeed: 1.8,
+            scale: 1.2,
+            chassisType: 'biped_wide',
+            primaryColor: '#b91c1c',
+            secondaryColor: '#facc15',
+            slots: ['heavy', 'heavy', 'heavy'],
+            defaultWeapons: ['trident', 'trident', 'trident'],
+            ability: 'SIEGE',
+            description: 'Destructor supremo equipado con triple ranura de arma pesada.'
+        },
+        {
+            id: 'lancelot',
+            name: 'Lancelot',
+            robotClass: 'Pesado',
+            hp: 172000,
+            speed: 36,
+            turnSpeed: 1.9,
+            scale: 1.18,
+            chassisType: 'biped_knight',
+            primaryColor: '#1d4ed8',
+            secondaryColor: '#fbbf24',
+            slots: ['medium', 'medium', 'heavy'],
+            defaultWeapons: ['taran', 'taran', 'thunder'],
+            ability: 'DASH',
+            description: 'Caballero pesado con blindaje frontal e impulso de embestida Rush.'
+        },
+        {
+            id: 'raijin',
+            name: 'Raijin',
+            robotClass: 'Pesado',
+            hp: 190000,
+            speed: 33,
+            turnSpeed: 1.8,
+            scale: 1.22,
+            chassisType: 'quad_spider',
+            primaryColor: '#dc2626',
+            secondaryColor: '#1e293b',
+            slots: ['heavy', 'heavy'],
+            defaultWeapons: ['trebuchet', 'trebuchet'],
+            ability: 'SIEGE',
+            description: 'Titán araña cuadrúpedo que se ancla en Modo Bastión con +35% daño.'
+        },
+        {
+            id: 'rhino',
+            name: 'Rhino',
+            robotClass: 'Pesado',
+            hp: 168000,
+            speed: 38,
+            turnSpeed: 1.8,
+            scale: 1.2,
+            chassisType: 'biped_knight',
+            primaryColor: '#4f46e5',
+            secondaryColor: '#c7d2fe',
+            slots: ['light', 'light', 'medium', 'medium'],
+            defaultWeapons: ['magnum', 'magnum', 'taran', 'taran'],
+            ability: 'SHIELD',
+            description: 'Ariete blindado con modo de asalto frontal que bloquea fuego.'
+        },
+        {
+            id: 'butch',
+            name: 'Butch',
+            robotClass: 'Pesado',
+            hp: 165000,
+            speed: 35,
+            turnSpeed: 1.8,
+            scale: 1.22,
+            chassisType: 'biped_wide',
+            primaryColor: '#7c2d12',
+            secondaryColor: '#fdba74',
+            slots: ['heavy', 'heavy', 'heavy', 'heavy'],
+            defaultWeapons: ['trident', 'trident', 'thunder', 'thunder'],
+            ability: 'OVERDRIVE',
+            description: 'Bestia del salvaje oeste capaz de montar 4 armas pesadas.'
+        }
+    ];
+
+    // ============================================================================
+    // SECCIÓN 4: ESTADO DEL JUGADOR Y MAZO DE 5 ROBOTS EN EL HANGAR
+    // ============================================================================
+    const PlayerDeck = {
+        selectedSlotIndex: 0,
+        catalogMode: 'ROBOTS', // 'ROBOTS' o 'WEAPONS'
+        editingWeaponIndex: 0,
+        robotFilter: 'ALL',
+        // Los 5 slots iniciales del jugador con un equipo clásico balanceado
+        slots: [
+            { robotId: 'griffin', weapons: ['pin', 'pin', 'tulumbas', 'tulumbas'], destroyedInBattle: false },
+            { robotId: 'cossack', weapons: ['tulumbas'], destroyedInBattle: false },
+            { robotId: 'leo',     weapons: ['magnum', 'magnum', 'magnum', 'thunder'], destroyedInBattle: false },
+            { robotId: 'fujin',   weapons: ['taran', 'taran', 'taran'], destroyedInBattle: false },
+            { robotId: 'fury',    weapons: ['trident', 'trident', 'trebuchet'], destroyedInBattle: false }
+        ]
+    };
+
+    function getRobotData(robotId) {
+        return ROBOTS_DB.find(r => r.id === robotId) || ROBOTS_DB[0];
+    }
+
+    function getWeaponData(weaponId) {
+        return WEAPONS_DB[weaponId] || WEAPONS_DB.punisher_l;
+    }
+
+    // ============================================================================
+    // SECCIÓN 5: GENERADOR PROCEDURAL 3D CARTOON / CEL-SHADED (MESH BUILDER)
+    // ============================================================================
+    const MeshBuilder = {
+        outlineMat: new THREE.LineBasicMaterial({ color: 0x090d16, linewidth: 2 }),
+
+        // Añade bordes negros estilo cómic/cel-shaded a cualquier malla 3D
+        addCartoonOutline(mesh, thresholdAngle = 22) {
+            const edges = new THREE.EdgesGeometry(mesh.geometry, thresholdAngle);
+            const line = new THREE.LineSegments(edges, this.outlineMat);
+            mesh.add(line);
+            return mesh;
+        },
+
+        createToonMaterial(hexColor, emissiveHex = 0x000000) {
+            return new THREE.MeshLambertMaterial({
+                color: new THREE.Color(hexColor),
+                emissive: new THREE.Color(emissiveHex)
+            });
+        },
+
+        // Construye el modelo 3D de un arma según su ID
+        buildWeaponMesh(weaponId) {
+            const wData = getWeaponData(weaponId);
+            const group = new THREE.Group();
+            const darkMat = this.createToonMaterial('#1e293b');
+            const accentMat = this.createToonMaterial(wData.color);
+
+            // Base de la torreta del arma
+            const bodySize = wData.slot === 'heavy' ? 1.15 : (wData.slot === 'medium' ? 0.9 : 0.7);
+            const baseGeo = new THREE.BoxGeometry(bodySize, bodySize * 0.85, bodySize * 1.5);
+            const baseMesh = this.addCartoonOutline(new THREE.Mesh(baseGeo, darkMat));
+            group.add(baseMesh);
+
+            if (wData.type === 'kinetic' || wData.type === 'shotgun') {
+                // Cañones rotativos o doble cañón de escopeta
+                const barrelCount = wData.slot === 'light' ? 1 : 2;
+                for (let i = 0; i < barrelCount; i++) {
+                    const offset = barrelCount === 1 ? 0 : (i === 0 ? -0.22 : 0.22);
+                    const bGeo = new THREE.CylinderGeometry(0.14 * bodySize, 0.14 * bodySize, 1.5 * bodySize, 8);
+                    bGeo.rotateX(Math.PI / 2);
+                    const bMesh = this.addCartoonOutline(new THREE.Mesh(bGeo, accentMat));
+                    bMesh.position.set(offset, 0, bodySize * 1.1);
+                    group.add(bMesh);
+                }
+            } else if (wData.type === 'rocket') {
+                // Caja lanzacohetes con bocas frontales
+                const podGeo = new THREE.BoxGeometry(bodySize * 1.15, bodySize * 0.95, bodySize * 1.3);
+                const podMesh = this.addCartoonOutline(new THREE.Mesh(podGeo, accentMat));
+                podMesh.position.z = 0.2;
+                group.add(podMesh);
+            } else if (wData.type === 'plasma') {
+                // Bobina de plasma brillante
+                const coilGeo = new THREE.BoxGeometry(bodySize * 0.75, bodySize * 0.75, bodySize * 1.8);
+                const coilMat = this.createToonMaterial(wData.color, wData.color);
+                const coilMesh = this.addCartoonOutline(new THREE.Mesh(coilGeo, coilMat));
+                coilMesh.position.z = 0.55;
+                group.add(coilMesh);
+            } else if (wData.type === 'sniper') {
+                // Cañón largo francotirador Trebuchet
+                const railGeo = new THREE.CylinderGeometry(0.18, 0.26, 3.2, 8);
+                railGeo.rotateX(Math.PI / 2);
+                const railMesh = this.addCartoonOutline(new THREE.Mesh(railGeo, accentMat));
+                railMesh.position.z = 1.6;
+                group.add(railMesh);
+            }
+
+            return group;
+        },
+
+        // Construye un Robot 3D completo con pelvis/piernas independientes y torso/armas rotatorios
+        buildRobotMesh(robotConfig, equippedWeaponIds, teamColorHex = null) {
+            const root = new THREE.Group();
+            const legsGroup = new THREE.Group();
+            const torsoGroup = new THREE.Group();
+            root.add(legsGroup);
+            root.add(torsoGroup);
+
+            const pColor = robotConfig.primaryColor;
+            const sColor = teamColorHex || robotConfig.secondaryColor;
+
+            const primaryMat = this.createToonMaterial(pColor);
+            const secondaryMat = this.createToonMaterial(sColor);
+            const darkMetalMat = this.createToonMaterial('#334155');
+            const cockpitMat = this.createToonMaterial('#38bdf8', '#0284c7');
+
+            const s = robotConfig.scale || 1.0;
+            const isSpider = robotConfig.chassisType === 'quad_spider';
+            const legPivots = [];
+
+            // 1. CONSTRUCCIÓN DE PIERNAS Y PELVIS
+            const pelvisGeo = new THREE.BoxGeometry(2.2 * s, 0.8 * s, 2.0 * s);
+            const pelvisMesh = this.addCartoonOutline(new THREE.Mesh(pelvisGeo, darkMetalMat));
+            pelvisMesh.position.y = 2.6 * s;
+            legsGroup.add(pelvisMesh);
+
+            if (isSpider) {
+                // 4 patas articuladas estilo araña (Fujin / Raijin)
+                const angles = [Math.PI / 4, (3 * Math.PI) / 4, -Math.PI / 4, -(3 * Math.PI) / 4];
+                angles.forEach((ang, idx) => {
+                    const legPivot = new THREE.Group();
+                    legPivot.position.set(Math.cos(ang) * 1.1 * s, 2.5 * s, Math.sin(ang) * 1.1 * s);
+                    legPivot.rotation.y = -ang + Math.PI / 2;
+
+                    const femurGeo = new THREE.BoxGeometry(0.7 * s, 0.7 * s, 2.2 * s);
+                    const femur = this.addCartoonOutline(new THREE.Mesh(femurGeo, primaryMat));
+                    femur.position.set(0, 0.2 * s, 1.0 * s);
+                    femur.rotation.x = -0.25;
+                    legPivot.add(femur);
+
+                    const shinGeo = new THREE.BoxGeometry(0.6 * s, 2.6 * s, 0.65 * s);
+                    const shin = this.addCartoonOutline(new THREE.Mesh(shinGeo, secondaryMat));
+                    shin.position.set(0, -1.2 * s, 1.9 * s);
+                    legPivot.add(shin);
+
+                    legsGroup.add(legPivot);
+                    legPivots.push({ group: legPivot, side: idx % 2 === 0 ? 1 : -1, isSpider: true });
+                });
+            } else {
+                // 2 piernas bípedas clásicas con pies blindados
+                [-1, 1].forEach(side => {
+                    const legPivot = new THREE.Group();
+                    legPivot.position.set(side * 1.25 * s, 2.6 * s, 0);
+
+                    const thighGeo = new THREE.BoxGeometry(0.85 * s, 1.5 * s, 1.0 * s);
+                    const thigh = this.addCartoonOutline(new THREE.Mesh(thighGeo, secondaryMat));
+                    thigh.position.set(0, -0.7 * s, 0);
+                    legPivot.add(thigh);
+
+                    const shinGeo = new THREE.BoxGeometry(0.95 * s, 1.4 * s, 1.1 * s);
+                    const shin = this.addCartoonOutline(new THREE.Mesh(shinGeo, primaryMat));
+                    shin.position.set(0, -1.8 * s, -0.1 * s);
+                    legPivot.add(shin);
+
+                    const footGeo = new THREE.BoxGeometry(1.15 * s, 0.45 * s, 1.65 * s);
+                    const foot = this.addCartoonOutline(new THREE.Mesh(footGeo, darkMetalMat));
+                    foot.position.set(0, -2.4 * s, 0.2 * s);
+                    legPivot.add(foot);
+
+                    legsGroup.add(legPivot);
+                    legPivots.push({ group: legPivot, side, isSpider: false });
+                });
+            }
+
+            // 2. CONSTRUCCIÓN DEL TORSO SUPERIOR SEGÚN ARQUETIPO
+            torsoGroup.position.y = 3.2 * s;
+
+            let torsoWidth = 2.8 * s;
+            let torsoHeight = 2.0 * s;
+            let torsoDepth = 2.6 * s;
+
+            if (robotConfig.chassisType === 'biped_wide') {
+                torsoWidth = 3.6 * s;
+                torsoHeight = 1.8 * s;
+            } else if (robotConfig.chassisType === 'biped_tall') {
+                torsoWidth = 2.5 * s;
+                torsoHeight = 2.5 * s;
+            } else if (robotConfig.chassisType === 'biped_tank') {
+                torsoWidth = 3.3 * s;
+                torsoDepth = 3.3 * s;
+            }
+
+            const mainHullGeo = new THREE.BoxGeometry(torsoWidth, torsoHeight, torsoDepth);
+            const mainHull = this.addCartoonOutline(new THREE.Mesh(mainHullGeo, primaryMat));
+            mainHull.position.y = torsoHeight * 0.5;
+            torsoGroup.add(mainHull);
+
+            // Cabina de cristal iluminada al frente (+Z es el frente del robot)
+            const visorGeo = new THREE.BoxGeometry(torsoWidth * 0.55, torsoHeight * 0.35, 0.3 * s);
+            const visor = this.addCartoonOutline(new THREE.Mesh(visorGeo, cockpitMat));
+            visor.position.set(0, torsoHeight * 0.62, torsoDepth * 0.5 + 0.05);
+            torsoGroup.add(visor);
+
+            // Hombreras / Detalles secundarios
+            const padGeo = new THREE.BoxGeometry(torsoWidth * 1.08, torsoHeight * 0.35, torsoDepth * 0.7);
+            const padMesh = this.addCartoonOutline(new THREE.Mesh(padGeo, secondaryMat));
+            padMesh.position.set(0, torsoHeight * 0.85, -0.1 * s);
+            torsoGroup.add(padMesh);
+
+            // Escudo físico frontal visible si el robot es tipo caballero (Gareth, Galahad, Lancelot, Rhino)
+            let physicalShieldMesh = null;
+            if (robotConfig.chassisType === 'biped_knight' || robotConfig.ability === 'SHIELD') {
+                const shieldGeo = new THREE.BoxGeometry(torsoWidth * 0.55, torsoHeight * 1.25, 0.35 * s);
+                const shieldMat = this.createToonMaterial('#3b82f6');
+                physicalShieldMesh = this.addCartoonOutline(new THREE.Mesh(shieldGeo, shieldMat));
+                physicalShieldMesh.position.set(-torsoWidth * 0.42, torsoHeight * 0.5, torsoDepth * 0.55);
+                torsoGroup.add(physicalShieldMesh);
+            }
+
+            // Domo de energía Ancile semitransparente (oculto por defecto salvo cuando está activo)
+            const ancileGeo = new THREE.SphereGeometry(4.2 * s, 14, 12);
+            const ancileMat = new THREE.MeshBasicMaterial({
+                color: 0x38bdf8,
+                transparent: true,
+                opacity: 0.26,
+                wireframe: false
+            });
+            const ancileMesh = new THREE.Mesh(ancileGeo, ancileMat);
+            ancileMesh.position.y = torsoHeight * 0.4;
+            ancileMesh.visible = false;
+            torsoGroup.add(ancileMesh);
+
+            // 3. MONTAJE DE LAS ARMAS EN LOS HARDPOINTS DEL TORSO
+            const slotPositions = this.getHardpointOffsets(robotConfig.slots.length, torsoWidth, torsoHeight, s);
+            const weaponMuzzles = [];
+
+            robotConfig.slots.forEach((slotType, idx) => {
+                const wId = (equippedWeaponIds && equippedWeaponIds[idx]) ? equippedWeaponIds[idx] : robotConfig.defaultWeapons[idx];
+                const weaponMesh = this.buildWeaponMesh(wId);
+                const pos = slotPositions[idx] || new THREE.Vector3(0, torsoHeight, 0);
+                weaponMesh.position.copy(pos);
+                torsoGroup.add(weaponMesh);
+
+                // Punto de salida del proyectil (muzzle)
+                const muzzle = new THREE.Object3D();
+                muzzle.position.set(0, 0, 1.4);
+                weaponMesh.add(muzzle);
+                weaponMuzzles.push({ mesh: weaponMesh, muzzle, weaponId: wId });
+            });
+
+            return {
+                root,
+                legsGroup,
+                torsoGroup,
+                legPivots,
+                weaponMuzzles,
+                ancileMesh,
+                physicalShieldMesh
+            };
+        },
+
+        // Calcula dónde colocar 1, 2, 3 o 4 armas sobre el torso del robot
+        getHardpointOffsets(count, w, h, s) {
+            if (count === 1) {
+                return [new THREE.Vector3(w * 0.55, h * 0.75, 0)];
+            } else if (count === 2) {
+                return [
+                    new THREE.Vector3(-w * 0.62, h * 0.78, 0),
+                    new THREE.Vector3(w * 0.62, h * 0.78, 0)
+                ];
+            } else if (count === 3) {
+                return [
+                    new THREE.Vector3(-w * 0.64, h * 0.65, 0),
+                    new THREE.Vector3(0, h * 1.18, -0.1 * s),
+                    new THREE.Vector3(w * 0.64, h * 0.65, 0)
+                ];
+            } else {
+                return [
+                    new THREE.Vector3(-w * 0.55, h * 1.1, 0),
+                    new THREE.Vector3(w * 0.55, h * 1.1, 0),
+                    new THREE.Vector3(-w * 0.72, h * 0.48, 0.1 * s),
+                    new THREE.Vector3(w * 0.72, h * 0.48, 0.1 * s)
+                ];
+            }
+        }
+    };
+
+    // ============================================================================
+    // SECCIÓN 6: MOTOR 3D COMPARTIDO Y ESCENA DEL HANGAR / BATALLA
+    // ============================================================================
+    const App = {
+        mode: 'HANGAR', // 'HANGAR' o 'BATTLE'
+        scene: null,
+        camera: null,
+        renderer: null,
+        clock: new THREE.Clock(),
+
+        // Vista previa del Hangar
+        hangarGroup: null,
+        hangarRobotModel: null,
+        isDraggingHangar: false,
+        lastMouseX: 0,
+
+        // Estado de la partida 5v5
+        battle: {
+            active: false,
+            blueTickets: 1000,
+            redTickets: 1000,
+            beacons: [],
+            obstacles: [], // Cajas AABB de edificios para colisión de robots y proyectiles
+            robots: [],
+            projectiles: [],
+            particles: [],
+            laserBeams: [],
+            playerRobot: null,
+            lockedTarget: null,
+            selectedSpawnId: 'BLUE_BASE',
+            stats: {
+                damageDealt: 0,
+                kills: 0,
+                beaconsCaptured: 0
+            }
+        },
+
+        // Controles de entrada
+        input: {
+            keys: {},
+            mouseDown: false,
+            cameraYaw: 0,
+            cameraPitch: 0.22,
+            pointerLocked: false
+        },
+
+        init() {
+            const container = document.getElementById('game-canvas-container');
+            this.scene = new THREE.Scene();
+            this.scene.background = new THREE.Color(0x1e293b);
+            this.scene.fog = new THREE.FogExp2(0x1e293b, 0.0018);
+
+            this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.5, 950);
+
+            this.renderer = new THREE.WebGLRenderer({ antialias: true });
+            this.renderer.setSize(window.innerWidth, window.innerHeight);
+            this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            container.appendChild(this.renderer.domElement);
+
+            // Iluminación estilizada Toon
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.75);
+            this.scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xfffbeb, 0.85);
+            dirLight.position.set(120, 220, 100);
+            this.scene.add(dirLight);
+
+            this.setupEvents();
+            this.initHangarScene();
+            this.renderHangarUI();
+
+            // Iniciar bucle de animación
+            this.animate();
+        },
+
+        // ------------------------------------------------------------------------
+        // ESCENA 3D DEL HANGAR Y ACTUALIZACIÓN DE LA UI DEL HANGAR
+        // ------------------------------------------------------------------------
+        initHangarScene() {
+            this.mode = 'HANGAR';
+            this.clearSceneGroups();
+            this.scene.background = new THREE.Color(0x0f172a);
+            this.scene.fog = new THREE.FogExp2(0x0f172a, 0.012);
+
+            this.hangarGroup = new THREE.Group();
+            this.scene.add(this.hangarGroup);
+
+            // Plataforma giratoria circular de hangar estilo Walking War Robots
+            const padGeo = new THREE.CylinderGeometry(5.5, 6.2, 0.8, 24);
+            const padMat = MeshBuilder.createToonMaterial('#334155');
+            const padMesh = MeshBuilder.addCartoonOutline(new THREE.Mesh(padGeo, padMat));
+            padMesh.position.y = -0.4;
+            this.hangarGroup.add(padMesh);
+
+            const ringGeo = new THREE.CylinderGeometry(4.6, 4.6, 0.86, 24);
+            const ringMat = MeshBuilder.createToonMaterial('#f59e0b');
+            const ringMesh = MeshBuilder.addCartoonOutline(new THREE.Mesh(ringGeo, ringMat));
+            ringMesh.position.y = -0.4;
+            this.hangarGroup.add(ringMesh);
+
+            // Pilares decorativos de fondo en el hangar
+            for (let i = -2; i <= 2; i++) {
+                if (i === 0) continue;
+                const pillarGeo = new THREE.BoxGeometry(1.8, 16, 1.8);
+                const pillar = MeshBuilder.addCartoonOutline(
+                    new THREE.Mesh(pillarGeo, MeshBuilder.createToonMaterial('#1e293b'))
+                );
+                pillar.position.set(i * 6.5, 7, -10);
+                this.hangarGroup.add(pillar);
+            }
+
+            this.camera.position.set(0, 5.2, 13.5);
+            this.camera.lookAt(0, 3.3, 0);
+
+            this.refreshHangar3DRobot();
+        },
+
+        refreshHangar3DRobot() {
+            if (!this.hangarGroup) return;
+            if (this.hangarRobotModel) {
+                this.hangarGroup.remove(this.hangarRobotModel.root);
+            }
+            const slot = PlayerDeck.slots[PlayerDeck.selectedSlotIndex];
+            const robotData = getRobotData(slot.robotId);
+            this.hangarRobotModel = MeshBuilder.buildRobotMesh(robotData, slot.weapons);
+            this.hangarRobotModel.root.rotation.y = -0.45;
+            this.hangarGroup.add(this.hangarRobotModel.root);
+        },
+
+        renderHangarUI() {
+            const slot = PlayerDeck.slots[PlayerDeck.selectedSlotIndex];
+            const robot = getRobotData(slot.robotId);
+            const ability = ABILITIES_DB[robot.ability];
+
+            // Ficha izquierda
+            const classColors = {
+                'Ligero': 'bg-emerald-500 text-slate-950',
+                'Mediano': 'bg-amber-400 text-slate-950',
+                'Pesado': 'bg-rose-500 text-white'
+            };
+            const classBadge = document.getElementById('hangar-robot-class');
+            classBadge.className = `text-[11px] font-bold uppercase px-2 py-0.5 rounded ${classColors[robot.robotClass]}`;
+            classBadge.textContent = `CLASE ${robot.robotClass.toUpperCase()}`;
+
+            document.getElementById('hangar-robot-name').textContent = robot.name.toUpperCase();
+            document.getElementById('hangar-robot-desc').textContent = robot.description;
+            document.getElementById('hangar-stat-hp').textContent = robot.hp.toLocaleString();
+            document.getElementById('hangar-stat-speed').textContent = `${robot.speed} km/h`;
+            document.getElementById('hangar-bar-hp').style.width = `${Math.min(100, (robot.hp / 200000) * 100)}%`;
+            document.getElementById('hangar-bar-speed').style.width = `${Math.min(100, (robot.speed / 60) * 100)}%`;
+
+            // Habilidad
+            document.getElementById('hangar-ability-icon').innerHTML = `<i class="fa-solid ${ability.icon}"></i>`;
+            document.getElementById('hangar-ability-name').textContent = ability.name;
+            document.getElementById('hangar-ability-cd').textContent = `CD: ${ability.cooldown}s`;
+            document.getElementById('hangar-ability-desc').textContent = ability.description;
+            document.getElementById('hangar-slot-indicator').textContent = `SLOT ACTIVO #${PlayerDeck.selectedSlotIndex + 1}`;
+
+            // Lista de ranuras de armas equipadas en este robot
+            const weaponsListEl = document.getElementById('hangar-weapons-list');
+            weaponsListEl.innerHTML = '';
+            robot.slots.forEach((slotType, wIdx) => {
+                const wId = slot.weapons[wIdx] || robot.defaultWeapons[wIdx];
+                const wData = getWeaponData(wId);
+                const isEditingThis = (PlayerDeck.catalogMode === 'WEAPONS' && PlayerDeck.editingWeaponIndex === wIdx);
+
+                const slotBadgeColor = slotType === 'heavy' ? 'bg-rose-500 text-white'
+                    : (slotType === 'medium' ? 'bg-amber-400 text-slate-950' : 'bg-emerald-400 text-slate-950');
+
+                const btn = document.createElement('button');
+                btn.className = `w-full toon-btn p-2.5 rounded-xl flex items-center justify-between text-left ${isEditingThis ? 'bg-amber-500/25 border-amber-400' : 'bg-slate-800/90'}`;
+                btn.innerHTML = `
+                    <div class="flex items-center gap-2.5">
+                        <span class="text-[10px] font-display font-black uppercase px-2 py-1 rounded ${slotBadgeColor}">
+                            ${wData.slotLabel}
+                        </span>
+                        <div>
+                            <div class="font-display font-bold text-xs text-white">${wData.name}</div>
+                            <div class="text-[10px] text-slate-400">Rango: ${wData.range}m • Daño: ${wData.damage}</div>
+                        </div>
+                    </div>
+                    <span class="text-xs text-amber-400 font-bold"><i class="fa-solid fa-pen-to-square mr-1"></i>Cambiar</span>
+                `;
+                btn.onclick = () => {
+                    PlayerDeck.catalogMode = 'WEAPONS';
+                    PlayerDeck.editingWeaponIndex = wIdx;
+                    this.renderHangarUI();
+                };
+                weaponsListEl.appendChild(btn);
+            });
+
+            // Renderizar los 5 Slots inferiores del Mazo
+            const slotsBar = document.getElementById('hangar-slots-bar');
+            slotsBar.innerHTML = '';
+            PlayerDeck.slots.forEach((sItem, idx) => {
+                const rData = getRobotData(sItem.robotId);
+                const isSelected = idx === PlayerDeck.selectedSlotIndex;
+                const card = document.createElement('button');
+                card.className = `toon-btn p-2.5 rounded-xl flex flex-col justify-between text-left cursor-pointer ${
+                    isSelected ? 'bg-gradient-to-b from-amber-400 to-amber-500 text-slate-950' : 'bg-slate-800 text-white'
+                }`;
+                card.innerHTML = `
+                    <div class="flex items-center justify-between w-full mb-1">
+                        <span class="text-[10px] font-display font-black uppercase ${isSelected ? 'text-slate-950' : 'text-amber-400'}">SLOT ${idx + 1}</span>
+                        <span class="text-[10px] font-bold px-1.5 py-0.2 rounded ${isSelected ? 'bg-slate-950 text-amber-400' : 'bg-slate-700 text-slate-300'}">${rData.robotClass}</span>
+                    </div>
+                    <div class="font-display font-black text-xs md:text-sm truncate">${rData.name}</div>
+                    <div class="text-[10px] ${isSelected ? 'text-slate-900 font-semibold' : 'text-slate-400'} truncate mt-0.5">
+                        ${sItem.weapons.map(w => getWeaponData(w).name).join(' • ')}
+                    </div>
+                `;
+                card.onclick = () => {
+                    PlayerDeck.selectedSlotIndex = idx;
+                    PlayerDeck.catalogMode = 'ROBOTS';
+                    this.refreshHangar3DRobot();
+                    this.renderHangarUI();
+                };
+                slotsBar.appendChild(card);
+            });
+
+            this.renderCatalogPanel();
+        },
+
+        renderCatalogPanel() {
+            const slot = PlayerDeck.slots[PlayerDeck.selectedSlotIndex];
+            const currentRobot = getRobotData(slot.robotId);
+            const titleEl = document.getElementById('catalog-title');
+            const subtitleEl = document.getElementById('catalog-subtitle');
+            const filtersEl = document.getElementById('catalog-filters');
+            const containerEl = document.getElementById('catalog-items-container');
+            containerEl.innerHTML = '';
+
+            if (PlayerDeck.catalogMode === 'ROBOTS') {
+                titleEl.textContent = 'CATÁLOGO DE ROBOTS (24)';
+                subtitleEl.textContent = `Slot #${PlayerDeck.selectedSlotIndex + 1}`;
+                filtersEl.classList.remove('hidden');
+
+                // Actualizar botones de filtro
+                document.querySelectorAll('.catalog-filter-btn').forEach(btn => {
+                    const f = btn.getAttribute('data-filter');
+                    btn.className = `catalog-filter-btn toon-btn font-bold text-xs py-1.5 rounded-lg ${
+                        PlayerDeck.robotFilter === f ? 'bg-amber-400 text-slate-950' : 'bg-slate-800 text-slate-200'
+                    }`;
+                });
+
+                const filteredRobots = ROBOTS_DB.filter(r =>
+                    PlayerDeck.robotFilter === 'ALL' || r.robotClass === PlayerDeck.robotFilter
+                );
+
+                filteredRobots.forEach(r => {
+                    const isEquipped = r.id === slot.robotId;
+                    const ab = ABILITIES_DB[r.ability];
+                    const item = document.createElement('div');
+                    item.className = `p-2.5 rounded-xl border-2 flex items-center justify-between gap-2 ${
+                        isEquipped ? 'bg-amber-500/20 border-amber-400' : 'bg-slate-950/80 border-slate-800'
+                    }`;
+                    item.innerHTML = `
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-1.5">
+                                <span class="w-3 h-3 rounded-full inline-block border border-black" style="background:${r.primaryColor}"></span>
+                                <span class="font-display font-bold text-sm text-white">${r.name}</span>
+                                <span class="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-amber-300 font-bold">${r.robotClass}</span>
+                            </div>
+                            <div class="text-[11px] text-slate-400 mt-0.5">
+                                HP: ${(r.hp / 1000).toFixed(0)}k • Vel: ${r.speed} • <span class="text-indigo-300">${ab.name}</span>
+                            </div>
+                            <div class="text-[10px] text-slate-400 mt-0.5">
+                                Ranuras (${r.slots.length}): ${r.slots.map(s => s === 'heavy' ? 'Pesada' : (s === 'medium' ? 'Mediana' : 'Ligera')).join(', ')}
+                            </div>
+                        </div>
+                        <button class="toon-btn shrink-0 px-3 py-1.5 rounded-lg font-display font-bold text-xs ${
+                            isEquipped ? 'bg-emerald-400 text-slate-950' : 'bg-amber-400 text-slate-950'
+                        }">
+                            ${isEquipped ? 'Equipado' : 'Elegir'}
+                        </button>
+                    `;
+                    item.querySelector('button').onclick = () => {
+                        slot.robotId = r.id;
+                        slot.weapons = [...r.defaultWeapons];
+                        this.refreshHangar3DRobot();
+                        this.renderHangarUI();
+                    };
+                    containerEl.appendChild(item);
+                });
+            } else {
+                // MODO CATÁLOGO DE ARMAS PARA LA RANURA SELECCIONADA
+                const requiredSlotType = currentRobot.slots[PlayerDeck.editingWeaponIndex];
+                const slotNameEsp = requiredSlotType === 'heavy' ? 'PESADAS' : (requiredSlotType === 'medium' ? 'MEDIANAS' : 'LIGERAS');
+                titleEl.textContent = `ARMAS ${slotNameEsp}`;
+                subtitleEl.textContent = `Ranura #${PlayerDeck.editingWeaponIndex + 1}`;
+                filtersEl.classList.add('hidden');
+
+                const compatibleWeapons = Object.values(WEAPONS_DB).filter(w => w.slot === requiredSlotType);
+                compatibleWeapons.forEach(w => {
+                    const currentWId = slot.weapons[PlayerDeck.editingWeaponIndex];
+                    const isEquipped = currentWId === w.id;
+                    const item = document.createElement('div');
+                    item.className = `p-3 rounded-xl border-2 flex flex-col gap-2 ${
+                        isEquipped ? 'bg-amber-500/20 border-amber-400' : 'bg-slate-950/80 border-slate-800'
+                    }`;
+                    item.innerHTML = `
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <span class="font-display font-black text-sm text-white">${w.name}</span>
+                                <span class="ml-2 text-[10px] px-2 py-0.5 rounded bg-slate-800 text-amber-400 font-bold uppercase">${w.type}</span>
+                            </div>
+                            <button class="toon-btn px-3 py-1 rounded-lg font-display font-bold text-xs ${
+                                isEquipped ? 'bg-emerald-400 text-slate-950' : 'bg-amber-400 text-slate-950'
+                            }">
+                                ${isEquipped ? 'Equipada' : 'Montar'}
+                            </button>
+                        </div>
+                        <p class="text-xs text-slate-300">${w.description}</p>
+                        <div class="grid grid-cols-3 gap-1 text-[11px] bg-slate-900 p-2 rounded-lg text-slate-300">
+                            <span><strong class="text-amber-400">Daño:</strong> ${w.damage}${w.pellets > 1 ? `x${w.pellets}` : ''}</span>
+                            <span><strong class="text-sky-400">Rango:</strong> ${w.range}m</span>
+                            <span><strong class="text-emerald-400">Recarga:</strong> ${w.reloadTime}s</span>
+                        </div>
+                    `;
+                    item.querySelector('button').onclick = () => {
+                        slot.weapons[PlayerDeck.editingWeaponIndex] = w.id;
+                        this.refreshHangar3DRobot();
+                        this.renderHangarUI();
+                    };
+                    containerEl.appendChild(item);
+                });
+            }
+        },
+
+        // ------------------------------------------------------------------------
+        // SECCIÓN 7: INICIALIZACIÓN DEL CAMPO DE BATALLA 5v5 Y MAPA TÁCTICO
+        // ------------------------------------------------------------------------
+        startBattle() {
+            this.mode = 'BATTLE';
+            document.getElementById('hangar-screen').classList.add('hidden');
+            document.getElementById('gameover-modal').classList.add('hidden');
+            document.getElementById('battle-hud').classList.remove('hidden');
+
+            // Reiniciar estado de destrucción del mazo del jugador
+            PlayerDeck.slots.forEach(s => { s.destroyedInBattle = false; });
+
+            this.battle.active = true;
+            this.battle.blueTickets = 1000;
+            this.battle.redTickets = 1000;
+            this.battle.beacons = [];
+            this.battle.obstacles = [];
+            this.battle.robots = [];
+            this.battle.projectiles = [];
+            this.battle.particles = [];
+            this.battle.laserBeams = [];
+            this.battle.playerRobot = null;
+            this.battle.lockedTarget = null;
+            this.battle.selectedSpawnId = 'BLUE_BASE';
+            this.battle.stats = { damageDealt: 0, kills: 0, beaconsCaptured: 0 };
+
+            this.buildBattlefieldMap();
+            this.spawnInitialTeams();
+
+            // Abrir modal de despliegue inicial para que el jugador elija su primer robot
+            this.openDeployModal(false);
+        },
+
+        clearSceneGroups() {
+            while (this.scene.children.length > 0) {
+                this.scene.remove(this.scene.children[0]);
+            }
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.78);
+            this.scene.add(ambientLight);
+            const sunLight = new THREE.DirectionalLight(0xfff7ed, 0.85);
+            sunLight.position.set(160, 280, 120);
+            this.scene.add(sunLight);
+        },
+
+        buildBattlefieldMap() {
+            this.clearSceneGroups();
+            this.scene.background = new THREE.Color(0x38bdf8);
+            this.scene.fog = new THREE.FogExp2(0x38bdf8, 0.0014);
+
+            // Suelo del mapa (440m x 440m)
+            const groundGeo = new THREE.PlaneGeometry(460, 460, 24, 24);
+            groundGeo.rotateX(-Math.PI / 2);
+            const groundMat = MeshBuilder.createToonMaterial('#cbd5e1');
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            this.scene.add(ground);
+
+            // Cuadrícula táctica en el suelo
+            const grid = new THREE.GridHelper(460, 23, 0x475569, 0x94a3b8);
+            grid.position.y = 0.08;
+            this.scene.add(grid);
+
+            // Plataformas de Base Azul (Sur: Z = +185) y Base Roja (Norte: Z = -185)
+            this.createSpawnPad(0, 185, '#2563eb');
+            this.createSpawnPad(0, -185, '#dc2626');
+
+            // Edificios de cobertura y puentes centrales con colisión AABB real
+            const buildingDefs = [
+                // Coberturas centrales alrededor de Baliza C
+                { x: -32, z: 0, w: 16, h: 16, d: 26, color: '#64748b' },
+                { x: 32, z: 0, w: 16, h: 16, d: 26, color: '#64748b' },
+                // Torres urbanas intermedias
+                { x: -75, z: 58, w: 22, h: 26, d: 22, color: '#475569' },
+                { x: 75, z: 58, w: 22, h: 26, d: 22, color: '#475569' },
+                { x: -75, z: -58, w: 22, h: 26, d: 22, color: '#475569' },
+                { x: 75, z: -58, w: 22, h: 26, d: 22, color: '#475569' },
+                // Muros bajos de cobertura cerca de bases
+                { x: 0, z: 105, w: 38, h: 11, d: 12, color: '#94a3b8' },
+                { x: 0, z: -105, w: 38, h: 11, d: 12, color: '#94a3b8' },
+                // Edificios laterales cerca de balizas exteriores
+                { x: -155, z: 45, w: 20, h: 22, d: 24, color: '#64748b' },
+                { x: -155, z: -45, w: 20, h: 22, d: 24, color: '#64748b' },
+                { x: 155, z: 45, w: 20, h: 22, d: 24, color: '#64748b' },
+                { x: 155, z: -45, w: 20, h: 22, d: 24, color: '#64748b' }
+            ];
+
+            buildingDefs.forEach(b => {
+                const geo = new THREE.BoxGeometry(b.w, b.h, b.d);
+                const mat = MeshBuilder.createToonMaterial(b.color);
+                const mesh = MeshBuilder.addCartoonOutline(new THREE.Mesh(geo, mat));
+                mesh.position.set(b.x, b.h / 2, b.z);
+                this.scene.add(mesh);
+
+                // Techo con borde colorido
+                const roofGeo = new THREE.BoxGeometry(b.w + 1, 1.2, b.d + 1);
+                const roof = MeshBuilder.addCartoonOutline(
+                    new THREE.Mesh(roofGeo, MeshBuilder.createToonMaterial('#334155'))
+                );
+                roof.position.set(b.x, b.h + 0.6, b.z);
+                this.scene.add(roof);
+
+                this.battle.obstacles.push({
+                    minX: b.x - b.w / 2,
+                    maxX: b.x + b.w / 2,
+                    minZ: b.z - b.d / 2,
+                    maxZ: b.z + b.d / 2,
+                    maxY: b.h
+                });
+            });
+
+            // LAS 5 BALIZAS TÁCTICAS (A, B, C, D, E)
+            const beaconDefinitions = [
+                { id: 'A', x: -120, z: 95, owner: 'NEUTRAL', progress: 0 },
+                { id: 'B', x: 120, z: 95, owner: 'NEUTRAL', progress: 0 },
+                { id: 'C', x: 0, z: 0, owner: 'NEUTRAL', progress: 0 },
+                { id: 'D', x: -120, z: -95, owner: 'NEUTRAL', progress: 0 },
+                { id: 'E', x: 120, z: -95, owner: 'NEUTRAL', progress: 0 }
+            ];
+
+            beaconDefinitions.forEach(bDef => {
+                const bGroup = new THREE.Group();
+                bGroup.position.set(bDef.x, 0, bDef.z);
+
+                // Base emisora en el suelo
+                const baseGeo = new THREE.CylinderGeometry(3.2, 4.0, 0.7, 16);
+                const baseMesh = MeshBuilder.addCartoonOutline(
+                    new THREE.Mesh(baseGeo, MeshBuilder.createToonMaterial('#1e293b'))
+                );
+                baseMesh.position.y = 0.35;
+                bGroup.add(baseMesh);
+
+                // Anillo de captura de 22m de radio
+                const ringGeo = new THREE.RingGeometry(21, 22.5, 32);
+                ringGeo.rotateX(-Math.PI / 2);
+                const ringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+                const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+                ringMesh.position.y = 0.15;
+                bGroup.add(ringMesh);
+
+                // Haz de luz vertical gigante de la baliza
+                const beamGeo = new THREE.CylinderGeometry(2.2, 2.2, 160, 16, 1, true);
+                const beamMat = new THREE.MeshBasicMaterial({
+                    color: 0xffffff,
+                    transparent: true,
+                    opacity: 0.32,
+                    side: THREE.DoubleSide
+                });
+                const beamMesh = new THREE.Mesh(beamGeo, beamMat);
+                beamMesh.position.y = 80;
+                bGroup.add(beamMesh);
+
+                this.scene.add(bGroup);
+
+                this.battle.beacons.push({
+                    ...bDef,
+                    radius: 22,
+                    ringMat,
+                    beamMat
+                });
+            });
+
+            this.renderBeaconsHUD();
+        },
+
+        createSpawnPad(x, z, colorHex) {
+            const padGeo = new THREE.CylinderGeometry(24, 25, 0.4, 24);
+            const padMat = MeshBuilder.createToonMaterial(colorHex);
+            const pad = MeshBuilder.addCartoonOutline(new THREE.Mesh(padGeo, padMat));
+            pad.position.set(x, 0.2, z);
+            this.scene.add(pad);
+        },
+
+        spawnInitialTeams() {
+            // Crear 4 Bots Aliados (Equipo Azul)
+            for (let i = 0; i < 4; i++) {
+                this.spawnAIRobot('BLUE', i);
+            }
+            // Crear 5 Bots Enemigos (Equipo Rojo)
+            for (let i = 0; i < 5; i++) {
+                this.spawnAIRobot('RED', i);
+            }
+        },
+
+        spawnAIRobot(team, indexOffset = 0) {
+            const randomRobot = ROBOTS_DB[Math.floor(Math.random() * ROBOTS_DB.length)];
+            const baseZ = team === 'BLUE' ? 182 : -182;
+            const spreadX = (indexOffset - 2) * 18 + (Math.random() - 0.5) * 8;
+
+            const bot = this.createRobotEntity({
+                robotConfig: randomRobot,
+                weaponIds: [...randomRobot.defaultWeapons],
+                team,
+                isPlayer: false,
+                x: spreadX,
+                z: baseZ,
+                nameTag: `${team === 'BLUE' ? 'Aliado' : 'Enemigo'}-${Math.floor(100 + Math.random() * 899)}`
+            });
+            this.battle.robots.push(bot);
+        },
+
+        // Crea la entidad completa de un robot (Jugador o IA) en el mundo 3D
+        createRobotEntity({ robotConfig, weaponIds, team, isPlayer, x, z, nameTag, deckSlotIndex = -1 }) {
+            const teamAccent = team === 'BLUE' ? '#38bdf8' : '#f43f5e';
+            const model = MeshBuilder.buildRobotMesh(robotConfig, weaponIds, isPlayer ? null : teamAccent);
+
+            model.root.position.set(x, 0, z);
+            const initialHeading = team === 'BLUE' ? Math.PI : 0;
+            model.legsGroup.rotation.y = initialHeading;
+            model.torsoGroup.rotation.y = initialHeading;
+            this.scene.add(model.root);
+
+            // Estado individual de cada arma equipada
+            const weaponsState = weaponIds.map((wId, idx) => {
+                const wData = getWeaponData(wId);
+                return {
+                    slotIndex: idx,
+                    data: wData,
+                    ammo: wData.clipSize,
+                    cooldownTimer: 0,
+                    reloadingTimer: 0,
+                    muzzleObj: model.weaponMuzzles[idx].muzzle
+                };
+            });
+
+            // Configurar escudo inicial si el robot tiene Ancile o Escudo Físico
+            const hasPassiveShield = (robotConfig.ability === 'ANCILE' || robotConfig.ability === 'SHIELD');
+            const maxShield = hasPassiveShield ? Math.round(robotConfig.hp * 0.45) : 0;
+            if (robotConfig.ability === 'ANCILE') {
+                model.ancileMesh.visible = true;
+            }
+
+            return {
+                id: 'r_' + Math.random().toString(36).substring(2, 9),
+                nameTag: nameTag || robotConfig.name,
+                config: robotConfig,
+                team,
+                isPlayer,
+                deckSlotIndex,
+                alive: true,
+                hp: robotConfig.hp,
+                maxHp: robotConfig.hp,
+                shield: maxShield,
+                maxShield: maxShield,
+                position: model.root.position,
+                velocityY: 0,
+                isGrounded: true,
+                legAngle: initialHeading,
+                torsoAngle: initialHeading,
+                walkCycle: 0,
+                radius: 3.6 * (robotConfig.scale || 1),
+                model,
+                weapons: weaponsState,
+                abilityState: {
+                    data: ABILITIES_DB[robotConfig.ability],
+                    activeTimer: 0,
+                    cooldownTimer: 0,
+                    isSiegeAnchored: false,
+                    isStealthed: false,
+                    damageMultiplier: 1.0,
+                    speedMultiplier: 1.0
+                },
+                ai: {
+                    thinkTimer: 0,
+                    targetBeacon: null,
+                    targetEnemy: null,
+                    strafeDir: Math.random() > 0.5 ? 1 : -1
+                }
+            };
+        },
+
+        // ------------------------------------------------------------------------
+        // MODAL DE DESPLIEGUE Y SELECCIÓN DE BALIZA (BEACON RUSH)
+        // ------------------------------------------------------------------------
+        openDeployModal(allowCancel = false) {
+            const modal = document.getElementById('deploy-modal');
+            const closeBtn = document.getElementById('btn-close-deploy-modal');
+            modal.classList.remove('hidden');
+
+            if (allowCancel && this.battle.playerRobot && this.battle.playerRobot.alive) {
+                closeBtn.classList.remove('hidden');
+            } else {
+                closeBtn.classList.add('hidden');
+            }
+
+            if (document.pointerLockElement) {
+                document.exitPointerLock();
+            }
+
+            this.renderDeployModalContent();
+        },
+
+        renderDeployModalContent() {
+            const spawnsEl = document.getElementById('deploy-spawn-points');
+            spawnsEl.innerHTML = '';
+
+            // Puntos de aparición disponibles: Base Aliada + Balizas Azules capturadas
+            const spawnOptions = [
+                { id: 'BLUE_BASE', label: 'Base Aliada (Sur)', x: 0, z: 185 }
+            ];
+            this.battle.beacons.forEach(b => {
+                if (b.owner === 'BLUE') {
+                    spawnOptions.push({ id: `BEACON_${b.id}`, label: `Baliza ${b.id} (Capturada)`, x: b.x, z: b.z });
+                }
+            });
+
+            if (!spawnOptions.some(s => s.id === this.battle.selectedSpawnId)) {
+                this.battle.selectedSpawnId = 'BLUE_BASE';
+            }
+
+            spawnOptions.forEach(sp => {
+                const isSelected = sp.id === this.battle.selectedSpawnId;
+                const btn = document.createElement('button');
+                btn.className = `toon-btn px-4 py-2 rounded-xl font-display font-bold text-xs flex items-center gap-2 cursor-pointer ${
+                    isSelected ? 'bg-sky-400 text-slate-950' : 'bg-slate-800 text-slate-200'
+                }`;
+                btn.innerHTML = `<i class="fa-solid fa-location-crosshairs"></i> ${sp.label}`;
+                btn.onclick = () => {
+                    this.battle.selectedSpawnId = sp.id;
+                    this.renderDeployModalContent();
+                };
+                spawnsEl.appendChild(btn);
+            });
+
+            // Los 5 Robots del Mazo del Jugador
+            const gridEl = document.getElementById('deploy-robots-grid');
+            gridEl.innerHTML = '';
+
+            const availableCount = PlayerDeck.slots.filter(s => !s.destroyedInBattle).length;
+            if (availableCount === 0) {
+                // Si se destruyeron los 5, restaurar el mazo de emergencia para que el jugador siempre pueda seguir jugando
+                PlayerDeck.slots.forEach(s => { s.destroyedInBattle = false; });
+            }
+
+            PlayerDeck.slots.forEach((slot, idx) => {
+                const rData = getRobotData(slot.robotId);
+                const isDestroyed = slot.destroyedInBattle;
+                const card = document.createElement('div');
+                card.className = `p-3 rounded-2xl border-2 flex flex-col justify-between ${
+                    isDestroyed ? 'bg-slate-950/60 border-rose-900/50 opacity-55' : 'bg-slate-800 border-slate-700'
+                }`;
+                card.innerHTML = `
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-[10px] font-display font-bold text-amber-400">SLOT #${idx + 1}</span>
+                            <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 text-slate-300 font-bold">${rData.robotClass}</span>
+                        </div>
+                        <div class="font-display font-black text-base text-white">${rData.name}</div>
+                        <div class="text-[11px] text-emerald-400 font-bold">HP: ${rData.hp.toLocaleString()}</div>
+                        <div class="text-[10px] text-slate-300 mt-1 space-y-0.5">
+                            ${slot.weapons.map(w => `<div>• ${getWeaponData(w).name}</div>`).join('')}
+                        </div>
+                    </div>
+                    <button ${isDestroyed ? 'disabled' : ''} class="toon-btn mt-3 w-full py-2 rounded-xl font-display font-black text-xs cursor-pointer ${
+                        isDestroyed ? 'bg-rose-950 text-rose-400 cursor-not-allowed' : 'bg-amber-400 text-slate-950'
+                    }">
+                        ${isDestroyed ? 'DESTRUIDO' : '¡DESPLEGAR!'}
+                    </button>
+                `;
+                if (!isDestroyed) {
+                    card.querySelector('button').onclick = () => {
+                        this.deployPlayerRobotFromSlot(idx);
+                    };
+                }
+                gridEl.appendChild(card);
+            });
+        },
+
+        deployPlayerRobotFromSlot(slotIndex) {
+            // Si el jugador tenía un robot vivo y decidió cambiarlo, marcar el anterior como destruido
+            if (this.battle.playerRobot && this.battle.playerRobot.alive) {
+                this.destroyRobot(this.battle.playerRobot, null);
+            }
+
+            const slot = PlayerDeck.slots[slotIndex];
+            const rData = getRobotData(slot.robotId);
+
+            // Coordenadas de aparición según punto elegido
+            let spawnX = (Math.random() - 0.5) * 14;
+            let spawnZ = 185;
+            if (this.battle.selectedSpawnId.startsWith('BEACON_')) {
+                const bId = this.battle.selectedSpawnId.replace('BEACON_', '');
+                const bObj = this.battle.beacons.find(b => b.id === bId);
+                if (bObj && bObj.owner === 'BLUE') {
+                    spawnX = bObj.x + (Math.random() - 0.5) * 10;
+                    spawnZ = bObj.z + (Math.random() - 0.5) * 10;
+                }
+            }
+
+            const playerBot = this.createRobotEntity({
+                robotConfig: rData,
+                weaponIds: [...slot.weapons],
+                team: 'BLUE',
+                isPlayer: true,
+                x: spawnX,
+                z: spawnZ,
+                nameTag: 'TÚ (' + rData.name + ')',
+                deckSlotIndex: slotIndex
+            });
+
+            this.battle.playerRobot = playerBot;
+            this.battle.robots.push(playerBot);
+            this.input.cameraYaw = Math.PI; // Mirando hacia el centro del mapa (Norte: -Z)
+
+            document.getElementById('deploy-modal').classList.add('hidden');
+            this.setupPlayerHUD(playerBot);
+        },
+
+        // ------------------------------------------------------------------------
+        // SECCIÓN 8: HUD DEL JUGADOR Y PANELES DE ARMAS
+        // ------------------------------------------------------------------------
+        setupPlayerHUD(playerBot) {
+            document.getElementById('hud-player-robot-name').textContent = playerBot.config.name.toUpperCase();
+            const ab = playerBot.abilityState.data;
+            document.getElementById('hud-ability-icon').className = `fa-solid ${ab.icon} text-2xl mb-1`;
+            document.getElementById('hud-ability-label').textContent = ab.name.split(' ')[0];
+
+            // Construir las tarjetas de armas en la esquina inferior derecha
+            const weaponsGrid = document.getElementById('hud-weapons-grid');
+            weaponsGrid.innerHTML = '';
+            playerBot.weapons.forEach((wState, idx) => {
+                const card = document.createElement('button');
+                card.id = `hud-weapon-card-${idx}`;
+                card.className = 'toon-btn bg-slate-900/90 p-2.5 rounded-xl text-left min-w-[125px] cursor-pointer';
+                card.innerHTML = `
+                    <div class="flex justify-between items-center text-[10px] font-display font-bold text-amber-400 mb-0.5">
+                        <span>TECLA [${idx + 1}]</span>
+                        <span class="uppercase">${wState.data.slotLabel}</span>
+                    </div>
+                    <div class="font-display font-black text-xs text-white truncate">${wState.data.name}</div>
+                    <div class="flex justify-between items-center text-[10px] text-slate-300 mt-1">
+                        <span id="hud-w-status-${idx}" class="text-emerald-400 font-bold">LISTA</span>
+                        <span id="hud-w-ammo-${idx}" class="font-mono">${wState.ammo}/${wState.data.clipSize}</span>
+                    </div>
+                    <div class="w-full h-1.5 bg-slate-950 rounded-full overflow-hidden mt-1 border border-slate-800">
+                        <div id="hud-w-bar-${idx}" class="h-full bg-amber-400 transition-all duration-75" style="width: 100%"></div>
+                    </div>
+                `;
+                card.onclick = () => {
+                    if (this.battle.playerRobot && this.battle.playerRobot.alive) {
+                        this.fireSingleWeapon(this.battle.playerRobot, idx);
+                    }
+                };
+                weaponsGrid.appendChild(card);
+            });
+
+            this.updatePlayerHUD();
+        },
+
+        updatePlayerHUD() {
+            const p = this.battle.playerRobot;
+            if (!p) return;
+
+            // Barra de vida
+            const hpPct = Math.max(0, (p.hp / p.maxHp) * 100);
+            document.getElementById('hud-player-hp-text').textContent = `${Math.ceil(p.hp).toLocaleString()} / ${p.maxHp.toLocaleString()}`;
+            document.getElementById('hud-player-hp-bar').style.width = `${hpPct}%`;
+
+            // Barra de escudo (si tiene Ancile o Escudo físico)
+            const shieldContainer = document.getElementById('hud-shield-container');
+            if (p.maxShield > 0) {
+                shieldContainer.classList.remove('hidden');
+                const shPct = Math.max(0, (p.shield / p.maxShield) * 100);
+                document.getElementById('hud-player-shield-text').textContent = Math.ceil(p.shield).toLocaleString();
+                document.getElementById('hud-player-shield-bar').style.width = `${shPct}%`;
+            } else {
+                shieldContainer.classList.add('hidden');
+            }
+
+            // Estado del chasis y diferencia angular torso/piernas
+            const badge = document.getElementById('hud-player-status-badge');
+            if (p.abilityState.activeTimer > 0) {
+                badge.textContent = p.abilityState.data.name.toUpperCase();
+                badge.className = 'ml-2 text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-indigo-500/30 text-indigo-200 border border-indigo-400';
+            } else {
+                badge.textContent = 'OPERATIVO';
+                badge.className = 'ml-2 text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+            }
+
+            const angleDiffDeg = Math.round(Math.abs(this.normalizeAngle(p.torsoAngle - p.legAngle)) * (180 / Math.PI));
+            document.getElementById('hud-leg-angle-diff').textContent = `GIRO: ${angleDiffDeg}°`;
+
+            // Cooldown de habilidad
+            const cdOverlay = document.getElementById('hud-ability-cooldown-overlay');
+            if (p.abilityState.activeTimer > 0) {
+                cdOverlay.classList.remove('hidden');
+                cdOverlay.textContent = `${p.abilityState.activeTimer.toFixed(1)}s`;
+                cdOverlay.className = 'absolute inset-0 bg-indigo-950/80 flex items-center justify-center font-display font-black text-lg text-cyan-300';
+            } else if (p.abilityState.cooldownTimer > 0) {
+                cdOverlay.classList.remove('hidden');
+                cdOverlay.textContent = `${p.abilityState.cooldownTimer.toFixed(1)}s`;
+                cdOverlay.className = 'absolute inset-0 bg-slate-950/85 flex items-center justify-center font-display font-black text-xl text-amber-400';
+            } else {
+                cdOverlay.classList.add('hidden');
+            }
+
+            // Estado de cada arma
+            p.weapons.forEach((w, idx) => {
+                const statusEl = document.getElementById(`hud-w-status-${idx}`);
+                const ammoEl = document.getElementById(`hud-w-ammo-${idx}`);
+                const barEl = document.getElementById(`hud-w-bar-${idx}`);
+                if (!statusEl || !ammoEl || !barEl) return;
+
+                if (w.reloadingTimer > 0) {
+                    statusEl.textContent = `RECARGA ${w.reloadingTimer.toFixed(1)}s`;
+                    statusEl.className = 'text-rose-400 font-bold';
+                    const pct = Math.max(0, 100 - (w.reloadingTimer / w.data.reloadTime) * 100);
+                    barEl.style.width = `${pct}%`;
+                    barEl.className = 'h-full bg-rose-500 transition-all duration-75';
+                } else {
+                    statusEl.textContent = 'LISTA';
+                    statusEl.className = 'text-emerald-400 font-bold';
+                    ammoEl.textContent = w.data.clipSize > 500 ? '∞' : `${w.ammo}/${w.data.clipSize}`;
+                    const pct = w.data.clipSize > 500 ? 100 : (w.ammo / w.data.clipSize) * 100;
+                    barEl.style.width = `${pct}%`;
+                    barEl.className = 'h-full bg-amber-400 transition-all duration-75';
+                }
+            });
+        },
+
+        renderBeaconsHUD() {
+            const row = document.getElementById('hud-beacons-row');
+            row.innerHTML = '';
+            this.battle.beacons.forEach(b => {
+                let colorClass = 'bg-slate-800 text-slate-300 border-slate-600';
+                if (b.owner === 'BLUE') colorClass = 'bg-sky-500 text-slate-950 border-sky-300';
+                if (b.owner === 'RED') colorClass = 'bg-rose-500 text-white border-rose-300';
+
+                const badge = document.createElement('div');
+                badge.className = `w-9 h-9 rounded-xl border-2 flex flex-col items-center justify-center font-display font-black text-xs relative overflow-hidden ${colorClass}`;
+                badge.innerHTML = `
+                    <span>${b.id}</span>
+                    <div class="w-full h-1 bg-slate-950/60 absolute bottom-0 left-0">
+                        <div class="h-full ${b.progress >= 0 ? 'bg-sky-300' : 'bg-rose-400'}" style="width: ${Math.abs(b.progress)}%"></div>
+                    </div>
+                `;
+                row.appendChild(badge);
+            });
+
+            // Actualizar barras de tickets
+            document.getElementById('hud-blue-tickets').textContent = Math.ceil(this.battle.blueTickets);
+            document.getElementById('hud-red-tickets').textContent = Math.ceil(this.battle.redTickets);
+            document.getElementById('hud-blue-bar').style.width = `${Math.max(0, (this.battle.blueTickets / 1000) * 100)}%`;
+            document.getElementById('hud-red-bar').style.width = `${Math.max(0, (this.battle.redTickets / 1000) * 100)}%`;
+        },
+
+        // ------------------------------------------------------------------------
+        // SECCIÓN 9: HABILIDADES ESPECIALES, DISPARO Y BALÍSTICA
+        // ------------------------------------------------------------------------
+        triggerRobotAbility(robot) {
+            if (!robot || !robot.alive) return;
+            const st = robot.abilityState;
+            if (st.activeTimer > 0 || st.cooldownTimer > 0) return;
+
+            st.activeTimer = st.data.duration;
+            st.cooldownTimer = st.data.cooldown + st.data.duration;
+
+            const abId = st.data.id;
+            if (abId === 'JUMP') {
+                robot.velocityY = 30;
+                robot.isGrounded = false;
+                st.speedMultiplier = 1.45;
+            } else if (abId === 'DASH') {
+                st.speedMultiplier = 2.85;
+            } else if (abId === 'STEALTH') {
+                st.isStealthed = true;
+                st.speedMultiplier = 1.2;
+            } else if (abId === 'ANCILE') {
+                robot.maxShield = Math.max(robot.maxShield, Math.round(robot.maxHp * 0.55));
+                robot.shield = robot.maxShield;
+                robot.model.ancileMesh.visible = true;
+            } else if (abId === 'SHIELD') {
+                robot.maxShield = Math.max(robot.maxShield, Math.round(robot.maxHp * 0.5));
+                robot.shield = robot.maxShield;
+                st.speedMultiplier = 1.35;
+            } else if (abId === 'SIEGE') {
+                st.isSiegeAnchored = true;
+                st.damageMultiplier = 1.35;
+                robot.maxShield = Math.max(robot.maxShield, Math.round(robot.maxHp * 0.35));
+                robot.shield = Math.min(robot.maxShield, robot.shield + Math.round(robot.maxHp * 0.35));
+            } else if (abId === 'OVERDRIVE') {
+                robot.hp = Math.min(robot.maxHp, robot.hp + Math.round(robot.maxHp * 0.22));
+                st.speedMultiplier = 1.25;
+                this.spawnDamagePopup(robot.position, '+REPARACIÓN', false, '#34d399');
+            }
+        },
+
+        updateRobotAbility(robot, dt) {
+            const st = robot.abilityState;
+            if (st.activeTimer > 0) {
+                st.activeTimer -= dt;
+                if (st.activeTimer <= 0) {
+                    st.activeTimer = 0;
+                    st.isSiegeAnchored = false;
+                    st.isStealthed = false;
+                    st.damageMultiplier = 1.0;
+                    st.speedMultiplier = 1.0;
+                    if (robot.config.ability !== 'ANCILE') {
+                        robot.model.ancileMesh.visible = false;
+                    }
+                }
+            }
+            if (st.cooldownTimer > 0) {
+                st.cooldownTimer = Math.max(0, st.cooldownTimer - dt);
+            }
+
+            // Regeneración pasiva lenta del escudo Ancile
+            if (robot.config.ability === 'ANCILE' && robot.shield < robot.maxShield) {
+                robot.shield = Math.min(robot.maxShield, robot.shield + robot.maxShield * 0.03 * dt);
+                robot.model.ancileMesh.visible = robot.shield > 500;
+            }
+        },
+
+        fireAllWeapons(robot) {
+            if (!robot || !robot.alive) return;
+            robot.weapons.forEach((_, idx) => this.fireSingleWeapon(robot, idx));
+        },
+
+        fireSingleWeapon(robot, weaponIdx) {
+            const w = robot.weapons[weaponIdx];
+            if (!w || w.reloadingTimer > 0 || w.cooldownTimer > 0 || w.ammo <= 0) return;
+
+            w.ammo--;
+            w.cooldownTimer = w.data.fireRate;
+            if (w.ammo <= 0) {
+                w.reloadingTimer = w.data.reloadTime;
+            }
+
+            // Obtener posición mundial de la boca del cañón
+            const muzzlePos = new THREE.Vector3();
+            w.muzzleObj.getWorldPosition(muzzlePos);
+
+            // Calcular dirección de disparo hacia el blanco fijado o hacia el frente del torso
+            const aimDir = new THREE.Vector3(Math.sin(robot.torsoAngle), 0, Math.cos(robot.torsoAngle));
+
+            let targetEntity = null;
+            if (robot.isPlayer && this.battle.lockedTarget && this.battle.lockedTarget.alive && !this.battle.lockedTarget.abilityState.isStealthed) {
+                targetEntity = this.battle.lockedTarget;
+            } else if (!robot.isPlayer && robot.ai.targetEnemy && robot.ai.targetEnemy.alive) {
+                targetEntity = robot.ai.targetEnemy;
+            }
+
+            if (targetEntity) {
+                const toTarget = new THREE.Vector3().subVectors(targetEntity.position, muzzlePos);
+                toTarget.y += 3.2; // Apuntar al centro del torso enemigo
+                const flatToTarget = new THREE.Vector3(toTarget.x, 0, toTarget.z).normalize();
+                // Si el enemigo está dentro del cono frontal del torso (35°), ajustar elevación y puntería
+                if (flatToTarget.dot(aimDir) > 0.82) {
+                    aimDir.copy(toTarget.normalize());
+                }
+            }
+
+            const pellets = w.data.pellets || 1;
+            const dmgPerPellet = Math.round(w.data.damage * robot.abilityState.damageMultiplier);
+
+            for (let p = 0; p < pellets; p++) {
+                const dir = aimDir.clone();
+                dir.x += (Math.random() - 0.5) * w.data.spread * 2;
+                dir.y += (Math.random() - 0.5) * w.data.spread * 1.2;
+                dir.z += (Math.random() - 0.5) * w.data.spread * 2;
+                dir.normalize();
+
+                if (w.data.type === 'sniper') {
+                    this.fireHitscanLaser(robot, muzzlePos, dir, w.data, dmgPerPellet);
+                } else {
+                    this.spawnProjectile(robot, muzzlePos, dir, w.data, dmgPerPellet);
+                }
+            }
+        },
+
+        fireHitscanLaser(owner, startPos, dir, wData, damage) {
+            const maxDist = wData.range;
+            let hitDist = maxDist;
+            let hitRobot = null;
+
+            // Comprobar impacto con enemigos
+            this.battle.robots.forEach(other => {
+                if (!other.alive || other.team === owner.team) return;
+                const center = other.position.clone().add(new THREE.Vector3(0, 3.2, 0));
+                const toOther = new THREE.Vector3().subVectors(center, startPos);
+                const proj = toOther.dot(dir);
+                if (proj > 0 && proj < hitDist) {
+                    const perpDistSq = toOther.lengthSq() - proj * proj;
+                    if (perpDistSq <= (other.radius * 1.15) ** 2) {
+                        hitDist = proj;
+                        hitRobot = other;
+                    }
+                }
+            });
+
+            const endPos = startPos.clone().addScaledVector(dir, hitDist);
+            if (hitRobot) {
+                this.applyDamage(hitRobot, damage, owner);
+                this.spawnImpactParticles(endPos, wData.color, 10);
+            }
+
+            // Dibujar rayo láser 3D temporal
+            const beamGeo = new THREE.BufferGeometry().setFromPoints([startPos, endPos]);
+            const beamMat = new THREE.LineBasicMaterial({ color: wData.color, linewidth: 3 });
+            const line = new THREE.Line(beamGeo, beamMat);
+            this.scene.add(line);
+            this.battle.laserBeams.push({ mesh: line, life: 0.18 });
+        },
+
+        spawnProjectile(owner, startPos, dir, wData, damage) {
+            const size = wData.type === 'rocket' ? 0.42 : (wData.type === 'plasma' ? 0.35 : 0.22);
+            const geo = new THREE.SphereGeometry(size, 6, 6);
+            const mat = new THREE.MeshBasicMaterial({ color: wData.color });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.copy(startPos);
+            this.scene.add(mesh);
+
+            this.battle.projectiles.push({
+                owner,
+                mesh,
+                velocity: dir.clone().multiplyScalar(wData.projectileSpeed),
+                distanceTraveled: 0,
+                maxRange: wData.range,
+                damage,
+                splashRadius: wData.splashRadius || 0,
+                color: wData.color
+            });
+        },
+
+        updateProjectiles(dt) {
+            for (let i = this.battle.projectiles.length - 1; i >= 0; i--) {
+                const proj = this.battle.projectiles[i];
+                const step = proj.velocity.clone().multiplyScalar(dt);
+                proj.mesh.position.add(step);
+                proj.distanceTraveled += step.length();
+
+                let hit = false;
+
+                // 1. Colisión con suelo o alcance máximo
+                if (proj.mesh.position.y <= 0.2 || proj.distanceTraveled >= proj.maxRange) {
+                    hit = true;
+                }
+
+                // 2. Colisión con edificios
+                if (!hit) {
+                    for (const obs of this.battle.obstacles) {
+                        if (
+                            proj.mesh.position.x >= obs.minX && proj.mesh.position.x <= obs.maxX &&
+                            proj.mesh.position.z >= obs.minZ && proj.mesh.position.z <= obs.maxZ &&
+                            proj.mesh.position.y <= obs.maxY
+                        ) {
+                            hit = true;
+                            break;
+                        }
+                    }
+                }
+
+                // 3. Colisión directa con robots enemigos
+                let directTarget = null;
+                if (!hit) {
+                    for (const bot of this.battle.robots) {
+                        if (!bot.alive || bot.team === proj.owner.team) continue;
+                        const dx = proj.mesh.position.x - bot.position.x;
+                        const dz = proj.mesh.position.z - bot.position.z;
+                        const dy = proj.mesh.position.y - (bot.position.y + 3.2);
+                        if (dx * dx + dz * dz <= bot.radius * bot.radius && Math.abs(dy) <= 4.2) {
+                            hit = true;
+                            directTarget = bot;
+                            break;
+                        }
+                    }
+                }
+
+                if (hit) {
+                    if (proj.splashRadius > 0) {
+                        // Daño explosivo en área (Cohetes Pin, Tulumbas, Trident)
+                        this.battle.robots.forEach(bot => {
+                            if (!bot.alive || bot.team === proj.owner.team) return;
+                            const dist = bot.position.distanceTo(proj.mesh.position);
+                            if (dist <= proj.splashRadius) {
+                                const falloff = 1 - (dist / (proj.splashRadius * 1.4));
+                                this.applyDamage(bot, Math.round(proj.damage * Math.max(0.35, falloff)), proj.owner);
+                            }
+                        });
+                        this.spawnImpactParticles(proj.mesh.position, proj.color, 12);
+                    } else if (directTarget) {
+                        this.applyDamage(directTarget, proj.damage, proj.owner);
+                        this.spawnImpactParticles(proj.mesh.position, proj.color, 5);
+                    }
+
+                    this.scene.remove(proj.mesh);
+                    this.battle.projectiles.splice(i, 1);
+                }
+            }
+
+            // Actualizar rayos láser y partículas
+            for (let i = this.battle.laserBeams.length - 1; i >= 0; i--) {
+                this.battle.laserBeams[i].life -= dt;
+                if (this.battle.laserBeams[i].life <= 0) {
+                    this.scene.remove(this.battle.laserBeams[i].mesh);
+                    this.battle.laserBeams.splice(i, 1);
+                }
+            }
+
+            for (let i = this.battle.particles.length - 1; i >= 0; i--) {
+                const pt = this.battle.particles[i];
+                pt.life -= dt;
+                pt.mesh.position.addScaledVector(pt.velocity, dt);
+                pt.mesh.scale.multiplyScalar(0.94);
+                if (pt.life <= 0) {
+                    this.scene.remove(pt.mesh);
+                    this.battle.particles.splice(i, 1);
+                }
+            }
+        },
+
+        spawnImpactParticles(pos, colorHex, count = 8) {
+            for (let i = 0; i < count; i++) {
+                const geo = new THREE.BoxGeometry(0.55, 0.55, 0.55);
+                const mat = new THREE.MeshBasicMaterial({ color: colorHex });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.position.copy(pos);
+                this.scene.add(mesh);
+
+                this.battle.particles.push({
+                    mesh,
+                    velocity: new THREE.Vector3(
+                        (Math.random() - 0.5) * 28,
+                        Math.random() * 22,
+                        (Math.random() - 0.5) * 28
+                    ),
+                    life: 0.35 + Math.random() * 0.25
+                });
+            }
+        },
+
+        applyDamage(target, amount, attacker) {
+            if (!target.alive || amount <= 0) return;
+
+            let remaining = amount;
+            if (target.shield > 0) {
+                const absorbed = Math.min(target.shield, remaining);
+                target.shield -= absorbed;
+                remaining -= absorbed;
+                if (target.shield <= 0 && target.config.ability === 'ANCILE') {
+                    target.model.ancileMesh.visible = false;
+                }
+            }
+
+            if (remaining > 0) {
+                target.hp = Math.max(0, target.hp - remaining);
+            }
+
+            if (attacker && attacker.isPlayer) {
+                this.battle.stats.damageDealt += amount;
+                this.spawnDamagePopup(target.position, `-${amount.toLocaleString()}`, true);
+            } else if (target.isPlayer) {
+                this.spawnDamagePopup(target.position, `-${amount.toLocaleString()}`, false, '#f43f5e');
+            }
+
+            if (target.hp <= 0) {
+                this.destroyRobot(target, attacker);
+            }
+        },
+
+        destroyRobot(robot, attacker) {
+            if (!robot.alive) return;
+            robot.alive = false;
+
+            this.spawnImpactParticles(robot.position.clone().add(new THREE.Vector3(0, 3, 0)), '#f97316', 24);
+            this.scene.remove(robot.model.root);
+
+            // Descontar tickets por baja
+            if (robot.team === 'BLUE') {
+                this.battle.blueTickets = Math.max(0, this.battle.blueTickets - 45);
+            } else {
+                this.battle.redTickets = Math.max(0, this.battle.redTickets - 45);
+            }
+
+            if (attacker && attacker.isPlayer && robot.team === 'RED') {
+                this.battle.stats.kills++;
+            }
+
+            if (this.battle.lockedTarget === robot) {
+                this.battle.lockedTarget = null;
+            }
+
+            if (robot.isPlayer) {
+                if (robot.deckSlotIndex >= 0 && PlayerDeck.slots[robot.deckSlotIndex]) {
+                    PlayerDeck.slots[robot.deckSlotIndex].destroyedInBattle = true;
+                }
+                setTimeout(() => {
+                    if (this.battle.active) {
+                        this.openDeployModal(false);
+                    }
+                }, 1100);
+            } else {
+                // Respawn automático para los bots tras 4 segundos
+                const team = robot.team;
+                setTimeout(() => {
+                    if (this.battle.active) {
+                        this.spawnAIRobot(team, Math.floor(Math.random() * 5));
+                    }
+                }, 4000);
+            }
+        },
+
+        spawnDamagePopup(worldPos, text, isPlayerHit = true, customColor = null) {
+            const screenPos = worldPos.clone().add(new THREE.Vector3(0, 6.5, 0)).project(this.camera);
+            if (screenPos.z > 1) return;
+
+            const x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
+            const y = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
+
+            const el = document.createElement('div');
+            el.className = 'damage-popup text-sm md:text-base';
+            el.style.left = `${x + (Math.random() - 0.5) * 30}px`;
+            el.style.top = `${y}px`;
+            el.style.color = customColor || (isPlayerHit ? '#facc15' : '#f87171');
+            el.textContent = text;
+
+            document.getElementById('world-ui-layer').appendChild(el);
+            setTimeout(() => el.remove(), 950);
+        },
+
+        // ------------------------------------------------------------------------
+        // SECCIÓN 10: MOVIMIENTO DE ROBOTS, IA TÁCTICA Y CAPTURA DE BALIZAS
+        // ------------------------------------------------------------------------
+        normalizeAngle(angle) {
+            while (angle > Math.PI) angle -= Math.PI * 2;
+            while (angle < -Math.PI) angle += Math.PI * 2;
+            return angle;
+        },
+
+        rotateTowards(current, target, maxStep) {
+            const diff = this.normalizeAngle(target - current);
+            if (Math.abs(diff) <= maxStep) return target;
+            return current + Math.sign(diff) * maxStep;
+        },
+
+        updateRobots(dt) {
+            this.battle.robots.forEach(bot => {
+                if (!bot.alive) return;
+
+                // Actualizar tiempos de recarga y cadencia de armas
+                bot.weapons.forEach(w => {
+                    if (w.cooldownTimer > 0) w.cooldownTimer = Math.max(0, w.cooldownTimer - dt);
+                    if (w.reloadingTimer > 0) {
+                        w.reloadingTimer -= dt;
+                        if (w.reloadingTimer <= 0) {
+                            w.reloadingTimer = 0;
+                            w.ammo = w.data.clipSize;
+                        }
+                    }
+                });
+
+                this.updateRobotAbility(bot, dt);
+
+                if (bot.isPlayer) {
+                    this.updatePlayerRobotControl(bot, dt);
+                } else {
+                    this.updateAIRobotControl(bot, dt);
+                }
+
+                // Física vertical (Salto y gravedad)
+                if (!bot.isGrounded || bot.position.y > 0) {
+                    bot.position.y += bot.velocityY * dt;
+                    bot.velocityY -= 48 * dt;
+                    if (bot.position.y <= 0) {
+                        bot.position.y = 0;
+                        bot.velocityY = 0;
+                        bot.isGrounded = true;
+                    }
+                }
+
+                this.resolveObstacleCollisions(bot);
+
+                // Aplicar rotaciones al modelo 3D
+                bot.model.legsGroup.rotation.y = bot.legAngle;
+                bot.model.torsoGroup.rotation.y = bot.torsoAngle;
+            });
+        },
+
+        updatePlayerRobotControl(p, dt) {
+            // Torso sigue la dirección de la cámara del ratón
+            p.torsoAngle = this.rotateTowards(p.torsoAngle, this.input.cameraYaw, p.config.turnSpeed * 1.6 * dt);
+
+            // Movimiento de piernas con WASD (independiente del torso)
+            let moveForward = 0;
+            let moveTurn = 0;
+            if (this.input.keys['KeyW'] || this.input.keys['ArrowUp']) moveForward += 1;
+            if (this.input.keys['KeyS'] || this.input.keys['ArrowDown']) moveForward -= 0.75;
+            if (this.input.keys['KeyA'] || this.input.keys['ArrowLeft']) moveTurn += 1;
+            if (this.input.keys['KeyD'] || this.input.keys['ArrowRight']) moveTurn -= 1;
+
+            if (!p.abilityState.isSiegeAnchored) {
+                if (moveTurn !== 0) {
+                    p.legAngle += moveTurn * p.config.turnSpeed * dt;
+                }
+                if (moveForward !== 0) {
+                    const speed = (p.config.speed * 0.58) * p.abilityState.speedMultiplier * moveForward;
+                    p.position.x += Math.sin(p.legAngle) * speed * dt;
+                    p.position.z += Math.cos(p.legAngle) * speed * dt;
+                    this.animateRobotLegs(p, dt * 8 * Math.abs(moveForward));
+                } else {
+                    this.resetRobotLegs(p, dt);
+                }
+            }
+
+            // Disparo continuo con clic izquierdo o Barra Espaciadora
+            if (this.input.mouseDown || this.input.keys['Space']) {
+                this.fireAllWeapons(p);
+            }
+
+            // Posicionar cámara en 3ra persona estilo War Robots (sobre el hombro)
+            const camDist = 17.5 * (p.config.scale || 1);
+            const camHeight = 8.8 * (p.config.scale || 1);
+            const camX = p.position.x - Math.sin(this.input.cameraYaw) * camDist;
+            const camZ = p.position.z - Math.cos(this.input.cameraYaw) * camDist;
+            const camY = p.position.y + camHeight + this.input.cameraPitch * 12;
+
+            this.camera.position.lerp(new THREE.Vector3(camX, Math.max(2, camY), camZ), 0.25);
+            const lookTarget = new THREE.Vector3(
+                p.position.x + Math.sin(this.input.cameraYaw) * 40,
+                p.position.y + 4.5 - this.input.cameraPitch * 18,
+                p.position.z + Math.cos(this.input.cameraYaw) * 40
+            );
+            this.camera.lookAt(lookTarget);
+
+            this.updatePlayerHUD();
+        },
+
+        updateAIRobotControl(bot, dt) {
+            bot.ai.thinkTimer -= dt;
+            if (bot.ai.thinkTimer <= 0) {
+                bot.ai.thinkTimer = 0.8 + Math.random() * 0.6;
+
+                // Buscar baliza no aliada más cercana
+                let bestBeacon = null;
+                let bestBDist = Infinity;
+                this.battle.beacons.forEach(b => {
+                    if (b.owner !== bot.team) {
+                        const d = Math.hypot(b.x - bot.position.x, b.z - bot.position.z);
+                        if (d < bestBDist) {
+                            bestBDist = d;
+                            bestBeacon = b;
+                        }
+                    }
+                });
+                bot.ai.targetBeacon = bestBeacon || this.battle.beacons[2];
+
+                // Buscar enemigo visible más cercano
+                let nearestEnemy = null;
+                let minEDist = Infinity;
+                this.battle.robots.forEach(other => {
+                    if (!other.alive || other.team === bot.team || other.abilityState.isStealthed) return;
+                    const d = bot.position.distanceTo(other.position);
+                    if (d < minEDist) {
+                        minEDist = d;
+                        nearestEnemy = other;
+                    }
+                });
+                bot.ai.targetEnemy = nearestEnemy;
+            }
+
+            // Movimiento hacia baliza objetivo
+            if (bot.ai.targetBeacon && !bot.abilityState.isSiegeAnchored) {
+                const dx = bot.ai.targetBeacon.x - bot.position.x;
+                const dz = bot.ai.targetBeacon.z - bot.position.z;
+                const distToBeacon = Math.hypot(dx, dz);
+                const desiredLegAngle = Math.atan2(dx, dz);
+
+                bot.legAngle = this.rotateTowards(bot.legAngle, desiredLegAngle, bot.config.turnSpeed * dt);
+                if (distToBeacon > 10) {
+                    const moveSpeed = (bot.config.speed * 0.52) * bot.abilityState.speedMultiplier;
+                    bot.position.x += Math.sin(bot.legAngle) * moveSpeed * dt;
+                    bot.position.z += Math.cos(bot.legAngle) * moveSpeed * dt;
+                    this.animateRobotLegs(bot, dt * 7);
+                }
+            }
+
+            // Apuntar torso al enemigo y disparar
+            if (bot.ai.targetEnemy && bot.ai.targetEnemy.alive) {
+                const ex = bot.ai.targetEnemy.position.x - bot.position.x;
+                const ez = bot.ai.targetEnemy.position.z - bot.position.z;
+                const distToEnemy = Math.hypot(ex, ez);
+                const desiredTorsoAngle = Math.atan2(ex, ez);
+
+                bot.torsoAngle = this.rotateTowards(bot.torsoAngle, desiredTorsoAngle, bot.config.turnSpeed * 1.4 * dt);
+
+                if (distToEnemy < 480 && Math.abs(this.normalizeAngle(bot.torsoAngle - desiredTorsoAngle)) < 0.35) {
+                    this.fireAllWeapons(bot);
+                    if (Math.random() < 0.015) {
+                        this.triggerRobotAbility(bot);
+                    }
+                }
+            } else {
+                bot.torsoAngle = this.rotateTowards(bot.torsoAngle, bot.legAngle, bot.config.turnSpeed * dt);
+            }
+        },
+
+        animateRobotLegs(robot, step) {
+            robot.walkCycle += step;
+            robot.model.legPivots.forEach(lp => {
+                lp.group.rotation.x = Math.sin(robot.walkCycle) * 0.42 * lp.side;
+            });
+        },
+
+        resetRobotLegs(robot, dt) {
+            robot.model.legPivots.forEach(lp => {
+                lp.group.rotation.x *= (1 - Math.min(1, dt * 8));
+            });
+        },
+
+        resolveObstacleCollisions(robot) {
+            // Límites del mapa
+            robot.position.x = Math.max(-215, Math.min(215, robot.position.x));
+            robot.position.z = Math.max(-215, Math.min(215, robot.position.z));
+
+            if (robot.position.y > 14) return; // Saltando por encima de edificios bajos
+
+            const r = robot.radius;
+            this.battle.obstacles.forEach(obs => {
+                const closestX = Math.max(obs.minX, Math.min(robot.position.x, obs.maxX));
+                const closestZ = Math.max(obs.minZ, Math.min(robot.position.z, obs.maxZ));
+                const dx = robot.position.x - closestX;
+                const dz = robot.position.z - closestZ;
+                const distSq = dx * dx + dz * dz;
+
+                if (distSq < r * r && distSq > 0.0001) {
+                    const dist = Math.sqrt(distSq);
+                    const overlap = r - dist;
+                    robot.position.x += (dx / dist) * overlap;
+                    robot.position.z += (dz / dist) * overlap;
+                }
+            });
+        },
+
+        updateBeaconsAndTickets(dt) {
+            let playerCapturingBeacon = null;
+
+            this.battle.beacons.forEach(b => {
+                let blueInZone = 0;
+                let redInZone = 0;
+
+                this.battle.robots.forEach(bot => {
+                    if (!bot.alive || bot.position.y > 12) return;
+                    const d = Math.hypot(bot.position.x - b.x, bot.position.z - b.z);
+                    if (d <= b.radius) {
+                        if (bot.team === 'BLUE') blueInZone++;
+                        if (bot.team === 'RED') redInZone++;
+                        if (bot.isPlayer && b.owner !== 'BLUE') {
+                            playerCapturingBeacon = b;
+                        }
+                    }
+                });
+
+                if (blueInZone > 0 && redInZone === 0) {
+                    b.progress = Math.min(100, b.progress + 28 * dt);
+                    if (b.progress >= 100 && b.owner !== 'BLUE') {
+                        b.owner = 'BLUE';
+                        b.ringMat.color.setHex(0x38bdf8);
+                        b.beamMat.color.setHex(0x38bdf8);
+                        if (playerCapturingBeacon === b) {
+                            this.battle.stats.beaconsCaptured++;
+                        }
+                    }
+                } else if (redInZone > 0 && blueInZone === 0) {
+                    b.progress = Math.max(-100, b.progress - 28 * dt);
+                    if (b.progress <= -100 && b.owner !== 'RED') {
+                        b.owner = 'RED';
+                        b.ringMat.color.setHex(0xf43f5e);
+                        b.beamMat.color.setHex(0xf43f5e);
+                    }
+                }
+            });
+
+            // Alerta de captura en HUD
+            const alertEl = document.getElementById('hud-beacon-capture-alert');
+            if (playerCapturingBeacon) {
+                alertEl.classList.remove('hidden');
+                document.getElementById('hud-beacon-capture-text').textContent = `CAPTURANDO BALIZA ${playerCapturingBeacon.id}...`;
+            } else {
+                alertEl.classList.add('hidden');
+            }
+
+            // Drenaje de tickets según balizas controladas
+            const blueBeacons = this.battle.beacons.filter(b => b.owner === 'BLUE').length;
+            const redBeacons = this.battle.beacons.filter(b => b.owner === 'RED').length;
+
+            this.battle.redTickets = Math.max(0, this.battle.redTickets - blueBeacons * 3.2 * dt);
+            this.battle.blueTickets = Math.max(0, this.battle.blueTickets - redBeacons * 3.2 * dt);
+
+            this.renderBeaconsHUD();
+
+            if (this.battle.redTickets <= 0) {
+                this.endBattle(true, '¡Tu escuadrón dominó las balizas y agotó los tickets enemigos!');
+            } else if (this.battle.blueTickets <= 0) {
+                this.endBattle(false, 'El equipo enemigo controló el mapa y agotó los tickets aliados.');
+            }
+        },
+
+        // ------------------------------------------------------------------------
+        // SECCIÓN 11: MARCADORES 3D EN PANTALLA, SELECCIÓN DE BLANCO Y MINIMAPA
+        // ------------------------------------------------------------------------
+        cycleTarget() {
+            const p = this.battle.playerRobot;
+            if (!p || !p.alive) return;
+
+            const enemies = this.battle.robots.filter(r => r.alive && r.team === 'RED' && !r.abilityState.isStealthed);
+            if (enemies.length === 0) {
+                this.battle.lockedTarget = null;
+                return;
+            }
+            const idx = enemies.indexOf(this.battle.lockedTarget);
+            this.battle.lockedTarget = enemies[(idx + 1) % enemies.length];
+        },
+
+        updateWorldUILayer() {
+            const layer = document.getElementById('world-ui-layer');
+            // Conservar únicamente los popups de daño flotantes y regenerar etiquetas de robots
+            Array.from(layer.querySelectorAll('.robot-world-tag')).forEach(el => el.remove());
+
+            if (!this.battle.active) return;
+
+            // Seleccionar blanco automático si no hay ninguno fijado
+            if (!this.battle.lockedTarget || !this.battle.lockedTarget.alive || this.battle.lockedTarget.abilityState.isStealthed) {
+                this.cycleTarget();
+            }
+
+            this.battle.robots.forEach(bot => {
+                if (!bot.alive || bot.isPlayer) return;
+                if (bot.team === 'RED' && bot.abilityState.isStealthed) return;
+
+                const worldPos = bot.position.clone().add(new THREE.Vector3(0, 7.5 * (bot.config.scale || 1), 0));
+                const projected = worldPos.project(this.camera);
+                if (projected.z > 1) return;
+
+                const x = (projected.x * 0.5 + 0.5) * window.innerWidth;
+                const y = (-projected.y * 0.5 + 0.5) * window.innerHeight;
+                const dist = this.battle.playerRobot ? Math.round(this.battle.playerRobot.position.distanceTo(bot.position)) : 0;
+                const isLocked = (this.battle.lockedTarget === bot);
+
+                const tag = document.createElement('div');
+                tag.className = 'robot-world-tag absolute -translate-x-1/2 -translate-y-full pointer-events-none flex flex-col items-center';
+                tag.style.left = `${x}px`;
+                tag.style.top = `${y}px`;
+
+                const hpPct = Math.max(0, (bot.hp / bot.maxHp) * 100);
+                const barColor = bot.team === 'BLUE' ? 'bg-sky-400' : 'bg-rose-500';
+                const borderColor = isLocked ? 'border-amber-400 scale-110' : 'border-slate-950';
+
+                tag.innerHTML = `
+                    <div class="px-2 py-0.5 rounded bg-slate-950/85 border ${borderColor} text-[10px] font-display font-bold ${bot.team === 'BLUE' ? 'text-sky-300' : 'text-rose-300'}">
+                        ${isLocked ? '<i class="fa-solid fa-crosshairs text-amber-400 mr-1"></i>' : ''}${bot.config.name} • ${dist}m
+                    </div>
+                    <div class="w-16 h-2 bg-slate-950 rounded-full overflow-hidden border border-black mt-0.5">
+                        <div class="h-full ${barColor}" style="width: ${hpPct}%"></div>
+                    </div>
+                `;
+                layer.appendChild(tag);
+            });
+        },
+
+        renderMinimap() {
+            const canvas = document.getElementById('minimap-canvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width;
+            const h = canvas.height;
+            const mapScale = w / 460;
+
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, w, h);
+
+            // Dibujar edificios
+            ctx.fillStyle = '#334155';
+            this.battle.obstacles.forEach(obs => {
+                const rx = (obs.minX + 230) * mapScale;
+                const rz = (obs.minZ + 230) * mapScale;
+                const rw = (obs.maxX - obs.minX) * mapScale;
+                const rd = (obs.maxZ - obs.minZ) * mapScale;
+                ctx.fillRect(rx, rz, rw, rd);
+            });
+
+            // Dibujar las 5 Balizas
+            this.battle.beacons.forEach(b => {
+                const bx = (b.x + 230) * mapScale;
+                const bz = (b.z + 230) * mapScale;
+                ctx.beginPath();
+                ctx.arc(bx, bz, 4.5, 0, Math.PI * 2);
+                ctx.fillStyle = b.owner === 'BLUE' ? '#38bdf8' : (b.owner === 'RED' ? '#f43f5e' : '#f8fafc');
+                ctx.fill();
+                ctx.strokeStyle = '#000';
+                ctx.stroke();
+            });
+
+            // Dibujar Robots
+            this.battle.robots.forEach(bot => {
+                if (!bot.alive) return;
+                const rx = (bot.position.x + 230) * mapScale;
+                const rz = (bot.position.z + 230) * mapScale;
+                ctx.beginPath();
+                ctx.arc(rx, rz, bot.isPlayer ? 4.2 : 3.0, 0, Math.PI * 2);
+                ctx.fillStyle = bot.isPlayer ? '#facc15' : (bot.team === 'BLUE' ? '#38bdf8' : '#f43f5e');
+                ctx.fill();
+            });
+        },
+
+        endBattle(isVictory, reason) {
+            this.battle.active = false;
+            if (document.pointerLockElement) {
+                document.exitPointerLock();
+            }
+
+            document.getElementById('deploy-modal').classList.add('hidden');
+            document.getElementById('gameover-modal').classList.remove('hidden');
+
+            const titleEl = document.getElementById('gameover-title');
+            const badgeEl = document.getElementById('gameover-badge');
+            if (isVictory) {
+                titleEl.textContent = '¡VICTORIA TÁCTICA!';
+                titleEl.className = 'font-display text-3xl font-black text-amber-400 mb-1';
+                badgeEl.innerHTML = '<i class="fa-solid fa-trophy"></i>';
+            } else {
+                titleEl.textContent = 'DERROTA EN COMBATE';
+                titleEl.className = 'font-display text-3xl font-black text-rose-500 mb-1';
+                badgeEl.innerHTML = '<i class="fa-solid fa-skull-crossbones"></i>';
+            }
+
+            document.getElementById('gameover-reason').textContent = reason;
+            document.getElementById('stat-final-damage').textContent = this.battle.stats.damageDealt.toLocaleString();
+            document.getElementById('stat-final-kills').textContent = this.battle.stats.kills;
+            document.getElementById('stat-final-beacons').textContent = this.battle.stats.beaconsCaptured;
+        },
+
+        returnToHangar() {
+            this.battle.active = false;
+            if (document.pointerLockElement) {
+                document.exitPointerLock();
+            }
+            document.getElementById('battle-hud').classList.add('hidden');
+            document.getElementById('deploy-modal').classList.add('hidden');
+            document.getElementById('gameover-modal').classList.add('hidden');
+            document.getElementById('world-ui-layer').innerHTML = '';
+            document.getElementById('hangar-screen').classList.remove('hidden');
+
+            this.initHangarScene();
+            this.renderHangarUI();
+        },
+
+        // ------------------------------------------------------------------------
+        // SECCIÓN 12: EVENTOS DE TECLADO, RATÓN Y BUCLE PRINCIPAL (ANIMATE)
+        // ------------------------------------------------------------------------
+        setupEvents() {
+            window.addEventListener('resize', () => {
+                this.camera.aspect = window.innerWidth / window.innerHeight;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+            // Rotación del robot 3D en el Hangar arrastrando con el ratón
+            const viewport = document.getElementById('hangar-3d-viewport');
+            viewport.addEventListener('mousedown', e => {
+                this.isDraggingHangar = true;
+                this.lastMouseX = e.clientX;
+            });
+            window.addEventListener('mouseup', () => {
+                this.isDraggingHangar = false;
+                this.input.mouseDown = false;
+            });
+            window.addEventListener('mousemove', e => {
+                if (this.mode === 'HANGAR' && this.isDraggingHangar && this.hangarRobotModel) {
+                    const deltaX = e.clientX - this.lastMouseX;
+                    this.lastMouseX = e.clientX;
+                    this.hangarRobotModel.root.rotation.y += deltaX * 0.01;
+                } else if (this.mode === 'BATTLE' && this.battle.active) {
+                    if (document.pointerLockElement === document.body) {
+                        this.input.cameraYaw -= e.movementX * 0.0024;
+                        this.input.cameraPitch = Math.max(-0.35, Math.min(0.55, this.input.cameraPitch + e.movementY * 0.0018));
+                    }
+                }
+            });
+
+            // Botones del Hangar
+            document.getElementById('btn-open-robot-catalog').onclick = () => {
+                PlayerDeck.catalogMode = 'ROBOTS';
+                this.renderHangarUI();
+            };
+
+            document.querySelectorAll('.catalog-filter-btn').forEach(btn => {
+                btn.onclick = () => {
+                    PlayerDeck.robotFilter = btn.getAttribute('data-filter');
+                    this.renderCatalogPanel();
+                };
+            });
+
+            document.getElementById('btn-start-battle').onclick = () => this.startBattle();
+
+            // Botones en Batalla y Modales
+            document.getElementById('btn-change-robot-midgame').onclick = () => this.openDeployModal(true);
+            document.getElementById('btn-close-deploy-modal').onclick = () => {
+                document.getElementById('deploy-modal').classList.add('hidden');
+            };
+            document.getElementById('btn-return-hangar').onclick = () => this.returnToHangar();
+            document.getElementById('btn-gameover-hangar').onclick = () => this.returnToHangar();
+            document.getElementById('btn-gameover-rematch').onclick = () => this.startBattle();
+
+            document.getElementById('btn-trigger-ability').onclick = () => {
+                if (this.battle.playerRobot) this.triggerRobotAbility(this.battle.playerRobot);
+            };
+            document.getElementById('btn-cycle-target').onclick = () => this.cycleTarget();
+
+            // Captura de puntero (Pointer Lock) al hacer clic en el lienzo durante la batalla
+            document.getElementById('game-canvas-container').addEventListener('mousedown', e => {
+                if (this.mode !== 'BATTLE' || !this.battle.active) return;
+                if (e.button === 0) {
+                    this.input.mouseDown = true;
+                    if (document.pointerLockElement !== document.body) {
+                        document.body.requestPointerLock();
+                    }
+                }
+            });
+
+            // Controles de Teclado
+            window.addEventListener('keydown', e => {
+                this.input.keys[e.code] = true;
+                if (this.mode !== 'BATTLE' || !this.battle.active) return;
+
+                const p = this.battle.playerRobot;
+                if (e.code === 'KeyQ' || e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+                    if (p) this.triggerRobotAbility(p);
+                } else if (e.code === 'Tab') {
+                    e.preventDefault();
+                    this.cycleTarget();
+                } else if (e.code === 'KeyM') {
+                    this.openDeployModal(true);
+                } else if (e.code === 'Digit1' && p) {
+                    this.fireSingleWeapon(p, 0);
+                } else if (e.code === 'Digit2' && p) {
+                    this.fireSingleWeapon(p, 1);
+                } else if (e.code === 'Digit3' && p) {
+                    this.fireSingleWeapon(p, 2);
+                } else if (e.code === 'Digit4' && p) {
+                    this.fireSingleWeapon(p, 3);
+                }
+            });
+
+            window.addEventListener('keyup', e => {
+                this.input.keys[e.code] = false;
+            });
+        },
+
+        animate() {
+            requestAnimationFrame(() => this.animate());
+            const dt = Math.min(0.05, this.clock.getDelta());
+
+            if (this.mode === 'HANGAR' && this.hangarRobotModel && !this.isDraggingHangar) {
+                this.hangarRobotModel.root.rotation.y += 0.35 * dt;
+            } else if (this.mode === 'BATTLE' && this.battle.active) {
+                this.updateRobots(dt);
+                this.updateProjectiles(dt);
+                this.updateBeaconsAndTickets(dt);
+                this.updateWorldUILayer();
+                this.renderMinimap();
+            }
+
+            this.renderer.render(this.scene, this.camera);
+        }
+    };
+
+    // Inicializar el juego al cargar el DOM
+    window.addEventListener('DOMContentLoaded', () => App.init());
+    </script>
+</body>
+</html>
